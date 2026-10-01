@@ -3,6 +3,8 @@
 {
   "name": "order-care-prototype",
   "compatibility_date": "2026-10-01",
+  // Serve the site at order-care-prototype.<account subdomain>.workers.dev.
+  "workers_dev": true,
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"

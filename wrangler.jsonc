@@ -1,0 +1,10 @@
+// Cloudflare Workers static-assets config (used if the repo is deployed as a Worker).
+// Cloudflare Pages ignores this file; for Pages use build command `npm run build` and output `dist`.
+{
+  "name": "order-care-prototype",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}

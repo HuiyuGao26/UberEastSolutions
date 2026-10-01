@@ -43,6 +43,7 @@ Needs Node 22 or later.
 npm install
 npm run dev      # http://localhost:5173
 npm run build    # production build in dist/
+npm run e2e      # with the dev server running: clicks through all 11 steps in headless Chrome, screenshots in e2e/shots/
 ```
 
 ## Deploy to Cloudflare

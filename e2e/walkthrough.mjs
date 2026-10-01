@@ -1,6 +1,6 @@
 // Clicks through the whole demo guide in headless Chrome and saves screenshots.
 // Usage: npm run dev, then `npm run e2e` (screenshots go to e2e/shots/).
-// Set CHROME_PATH if Chrome is not in the default macOS location.
+// Set CHROME_PATH if Chrome is not in the default macOS location; E2E_HEIGHT=760 tests a short window.
 import { mkdirSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
 const OUT = process.argv[2] ?? 'e2e/shots'
@@ -9,7 +9,7 @@ mkdirSync(OUT, { recursive: true })
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: 'new',
-  defaultViewport: { width: 1600, height: 1000 },
+  defaultViewport: { width: 1600, height: Number(process.env.E2E_HEIGHT ?? 1000) },
 })
 const page = await browser.newPage()
 const errors = []
@@ -20,7 +20,20 @@ await page.evaluate(() => localStorage.clear())
 await page.reload({ waitUntil: 'networkidle0' })
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+async function assertGuideShowsCurrent(text) {
+  await sleep(500) // let the smooth scroll finish
+  const visible = await page.evaluate((t) => {
+    const list = document.querySelector('aside ol')
+    const btn = [...list.querySelectorAll('button')].find((b) => b.textContent.includes(t))
+    if (!btn) return false
+    const l = list.getBoundingClientRect()
+    const b = btn.getBoundingClientRect()
+    return b.top >= l.top && b.bottom <= l.bottom
+  }, text)
+  if (!visible) throw new Error(`Guide button "${text}" is scrolled out of view`)
+}
 async function click(text, sel = 'button, [role=tab], label') {
+  if (text.startsWith('Go to ')) await assertGuideShowsCurrent(text)
   const handles = await page.$$(sel)
   for (const h of handles) {
     const ok = await h.evaluate((el, t) => {

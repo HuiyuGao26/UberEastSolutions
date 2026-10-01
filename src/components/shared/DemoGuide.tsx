@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { Check, ChevronRight, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -14,6 +15,16 @@ export function DemoGuide() {
   const dispatch = useDispatch()
   const current = currentStepIndex(s)
   const doneCount = STEPS.filter((step) => step.done(s)).length
+  const listRef = useRef<HTMLOListElement>(null)
+
+  // Keep the current step in view: centre it in the list whenever it changes.
+  useEffect(() => {
+    const list = listRef.current
+    const item = list?.querySelector<HTMLElement>(`[data-step="${current}"]`)
+    if (!list || !item) return
+    const top = item.offsetTop - (list.clientHeight - item.offsetHeight) / 2
+    list.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' })
+  }, [current])
 
   return (
     <div className="flex h-full flex-col">
@@ -33,13 +44,14 @@ export function DemoGuide() {
         </p>
       </div>
 
-      <ol className="flex-1 space-y-1 overflow-y-auto p-2">
+      <ol ref={listRef} className="relative flex-1 space-y-1 overflow-y-auto p-2">
         {STEPS.map((step, i) => {
           const done = step.done(s)
           const isCurrent = i === current
           return (
             <li
               key={step.id}
+              data-step={i}
               className={cn('rounded-lg border border-transparent p-3', isCurrent && 'border-primary/30 bg-primary/5')}
             >
               <div className="flex gap-2.5">

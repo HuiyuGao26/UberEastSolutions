@@ -25,3 +25,6 @@ dist-ssr
 
 # Cloudflare
 .wrangler
+
+# Walkthrough screenshots
+e2e/shots/

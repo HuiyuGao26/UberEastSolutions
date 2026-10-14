@@ -17,9 +17,13 @@ A prototype for our INFOSYS 704 group assignment (A3). It builds Gao’s A2-D1 p
 - **Payouts.** A customer refund taken from the payout shows its reason, the items, the fee that is kept in full, and the payout before and after.
 - **Challenge this deduction.** The merchant writes why it should be reversed and sends it. The card then shows the challenge and the date an outcome is due (day 7). A deduction can be challenged within 30 days of the order date.
 
-The sample day starts with one order (4816) already accepted and a deduction made on it a few minutes ago.
+The sample day starts with four new orders and no deductions. After accepting an order, use **Simulate: customer reports a missing item** in the top bar outside the tablet. This plays the customer reporting a problem after delivery: one unit of the cheapest item on the most recently accepted order is refunded, at its price after any promotion. The tablet shows a notification and a Payouts badge without navigating away or opening a dialog. Open **Payouts** to see why and send a challenge.
 
-**Reset** in the top bar starts the sample day again. What you do is saved in your browser only.
+For example: accept order **4821** with an expected payout of **$39.06** → simulate the missing item → see a **$5.00** deduction for one Feijoa soda → open Payouts and see **$39.06 → $34.06**, with the **$16.74** fee kept in full → send a challenge.
+
+The simulation is available only with sample data, once per accepted order. Before accepting an order it is disabled; after simulating a report, accept another order to try it again. On the SAP sandbox it stays disabled: orders and credit memo requests are read for display, and acceptance is kept locally as before.
+
+**Reset** in the top bar starts the sample day again, clearing decisions, simulated refunds and challenges. What you do is saved in your browser only, including simulated deductions after a reload.
 
 ## How it uses the SAP APIs
 

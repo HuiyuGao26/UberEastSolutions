@@ -36,10 +36,8 @@ type LocalRecords = Pick<OrderRepository, 'listDecisions' | 'saveDecision' | 'li
  * sandbox only allows GET (writes return HTTP 405), and neither API has a
  * field for "amount shown at acceptance" or for a challenge. Against a
  * company's own S/4HANA system these would be written back instead.
- *
- * `earlierDecisions` are orders accepted before the demo starts.
  */
-export function localRecords(source: Source, earlierDecisions: () => Decision[] = () => []): LocalRecords {
+export function localRecords(source: Source): LocalRecords {
   const key = (name: string) => `order-care:${name}:${source}`
   function read<T>(name: string): T[] {
     try {
@@ -57,10 +55,7 @@ export function localRecords(source: Source, earlierDecisions: () => Decision[] 
     }
   }
   return {
-    listDecisions: () => {
-      const own = read<Decision>('decisions')
-      return [...own, ...earlierDecisions().filter((d) => !own.some((o) => o.order.id === d.order.id))]
-    },
+    listDecisions: () => read<Decision>('decisions'),
     saveDecision: (decision) => write('decisions', [decision, ...read<Decision>('decisions').filter((d) => d.order.id !== decision.order.id)]),
     listChallenges: () => read<Challenge>('challenges'),
     saveChallenge: (challenge) =>

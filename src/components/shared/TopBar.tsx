@@ -1,4 +1,4 @@
-import { Database, FlaskConical, RotateCcw } from 'lucide-react'
+import { Database, FlaskConical, MessageSquareWarning, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import type { Source } from '@/domain/types'
@@ -12,7 +12,15 @@ const SOURCES: { id: Source; label: string; icon: typeof Database }[] = [
 ]
 
 export function TopBar() {
-  const { source, setSource, reset } = useApp()
+  const { source, setSource, reset, decisions, simulationTarget, simulateMissingItem } = useApp()
+  // Which order the simulation is about, or why it cannot run right now.
+  const simulationHint = simulationTarget
+    ? `About order ${simulationTarget.order.id}`
+    : source === 'sap'
+      ? 'Sample data only: the sandbox cannot be written to'
+      : decisions.some((d) => d.accepted)
+        ? 'Accept another order first'
+        : 'Accept an order first'
 
   return (
     <header className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b bg-background px-4 py-2">
@@ -47,6 +55,13 @@ export function TopBar() {
             )
           })}
         </nav>
+      </div>
+
+      <div className="flex flex-col items-start gap-0.5">
+        <Button variant="outline" size="sm" disabled={!simulationTarget} onClick={simulateMissingItem}>
+          <MessageSquareWarning /> Simulate: customer reports a missing item
+        </Button>
+        <span className="pl-1 text-[11px] leading-tight text-muted-foreground">{simulationHint}</span>
       </div>
 
       <div className="ml-auto flex items-center gap-2">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ClipboardCheck, Inbox, RefreshCw, TriangleAlert, Wallet } from 'lucide-react'
+import { BellRing, ClipboardCheck, Inbox, RefreshCw, TriangleAlert, Wallet, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ const NAV: { id: Screen; label: string; icon: typeof Inbox }[] = [
 ]
 
 export function MerchantApp() {
-  const { screen, setScreen, repository, decisions, deductions, challenges } = useApp()
+  const { screen, setScreen, repository, decisions, deductions, challenges, notice, dismissNotice } = useApp()
   const offers = useOffers()
   const [openOrderId, setOpenOrderId] = useState<string | null>(null)
   const openOffer = offers.find((o) => o.id === openOrderId)
@@ -75,6 +75,26 @@ export function MerchantApp() {
           {screen === 'payouts' && <PayoutsScreen />}
         </main>
       </div>
+      {notice && (
+        <div
+          role="status"
+          className="absolute top-3 right-3 z-20 flex w-80 items-start gap-3 rounded-xl bg-zinc-900 p-3 text-sm text-white shadow-xl animate-in fade-in-0 slide-in-from-top-2"
+        >
+          <BellRing className="mt-0.5 size-4 shrink-0 text-amber-300" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">
+              {signedMoney(-notice.amount, notice.currency)} on order {notice.reference.id}
+            </p>
+            <p className="text-xs text-zinc-300">A customer refund was taken from your payout just now.</p>
+            <button className="mt-1.5 text-xs font-medium text-amber-300 underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
+              See why and respond
+            </button>
+          </div>
+          <button onClick={dismissNotice} aria-label="Dismiss" className="rounded-md p-0.5 text-zinc-400 hover:bg-white/10 hover:text-white">
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
       {openOffer && <OfferDialog order={openOffer} onClose={() => setOpenOrderId(null)} />}
     </TabletFrame>
   )

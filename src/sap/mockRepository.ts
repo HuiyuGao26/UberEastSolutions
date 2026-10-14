@@ -1,35 +1,53 @@
 /** Serves the sample data in `mock-data.ts` through the same interface as the live sandbox. */
-import { toOrder, withPricing } from '@/domain/mapping'
-import { payoutBreakdown } from '@/domain/rules'
-import type { Decision } from '@/domain/types'
-import {
-  EARLIER_ACCEPTED_MINUTES_AGO,
-  EARLIER_ACCEPTED_ORDER,
-  MOCK_PRICING_ELEMENTS,
-  mockCreditMemoRequests,
-  mockSalesOrders,
-} from './mock-data'
+import { round2 } from '@/domain/format'
+import type { Order } from '@/domain/types'
+import { MOCK_PRICING_ELEMENTS, missingItemCreditMemoRequest, mockSalesOrders } from './mock-data'
 import { localRecords, type OrderRepository } from './repository'
+import type { SapCreditMemoRequest } from './types'
 
-function pricingElements(salesOrder: string, salesOrderItem: string) {
-  return MOCK_PRICING_ELEMENTS.filter((e) => e.SalesOrder === salesOrder && e.SalesOrderItem === salesOrderItem)
+const CREDIT_MEMO_REQUESTS_KEY = 'order-care:mock-credit-memo-requests'
+const FIRST_CREDIT_MEMO_REQUEST = 60000231
+
+/** Credit memo requests created by `simulateMissingItemRefund`, kept so they survive a reload. */
+function storedCreditMemoRequests(): SapCreditMemoRequest[] {
+  try {
+    return JSON.parse(localStorage.getItem(CREDIT_MEMO_REQUESTS_KEY) ?? '[]') as SapCreditMemoRequest[]
+  } catch {
+    // Storage can be unavailable (private window); start empty.
+    return []
+  }
 }
 
-/** The sample day starts with one order already accepted, so a deduction on it can be shown. */
-function earlierDecisions(): Decision[] {
-  const salesOrder = mockSalesOrders().find((so) => so.SalesOrder === EARLIER_ACCEPTED_ORDER)
-  if (!salesOrder) return []
-  const order = toOrder(salesOrder)
-  const priced = { ...order, lines: order.lines.map((line) => withPricing(line, pricingElements(order.id, line.id))) }
-  return [
-    {
-      order: priced,
-      accepted: true,
-      decidedAt: new Date(Date.now() - EARLIER_ACCEPTED_MINUTES_AGO * 60_000).toISOString(),
-      shown: payoutBreakdown(priced),
-    },
-  ]
+function storeCreditMemoRequests(requests: SapCreditMemoRequest[]) {
+  try {
+    localStorage.setItem(CREDIT_MEMO_REQUESTS_KEY, JSON.stringify(requests))
+  } catch {
+    // Ignore: the app still works without persistence.
+  }
 }
+
+/**
+ * Plays the part of the customer and of Uber's support: the customer
+ * reports one missing item on the order, is refunded, and the refund is
+ * recorded as a credit memo request against the order. The cheapest item
+ * on the order is the one reported.
+ */
+export function simulateMissingItemRefund(order: Order): SapCreditMemoRequest {
+  const existing = storedCreditMemoRequests()
+  // One simulated report per order, including clicks before React updates the button.
+  const previous = existing.find((request) => request.ReferenceSDDocumentCategory === 'C' && request.ReferenceSDDocument === order.id)
+  if (previous) return previous
+  const unitValue = (line: Order['lines'][number]) => (line.listAmount - line.promoAmount) / line.qty
+  const line = order.lines.reduce((cheapest, l) => (unitValue(l) < unitValue(cheapest) ? l : cheapest))
+  const request = missingItemCreditMemoRequest(String(FIRST_CREDIT_MEMO_REQUEST + existing.length), order.id, order.currency, {
+    text: line.name,
+    amount: round2(unitValue(line)),
+  })
+  storeCreditMemoRequests([request, ...existing])
+  return request
+}
+
+const records = localRecords('sample')
 
 export const mockRepository: OrderRepository = {
   source: 'sample',
@@ -37,7 +55,7 @@ export const mockRepository: OrderRepository = {
   requests: [
     { label: 'Orders, items and customers', request: 'mockSalesOrders() in src/sap/mock-data.ts' },
     { label: 'Prices and discounts of one item', request: 'MOCK_PRICING_ELEMENTS in src/sap/mock-data.ts' },
-    { label: 'Customer refunds (deductions)', request: 'mockCreditMemoRequests() in src/sap/mock-data.ts' },
+    { label: 'Customer refunds (deductions)', request: 'Created by “Simulate: customer reports a missing item”, kept in this browser' },
   ],
 
   async listSalesOrders() {
@@ -45,12 +63,16 @@ export const mockRepository: OrderRepository = {
   },
 
   async listItemPricingElements(salesOrder, salesOrderItem) {
-    return pricingElements(salesOrder, salesOrderItem)
+    return MOCK_PRICING_ELEMENTS.filter((e) => e.SalesOrder === salesOrder && e.SalesOrderItem === salesOrderItem)
   },
 
   async listCreditMemoRequests() {
-    return mockCreditMemoRequests()
+    return storedCreditMemoRequests()
   },
 
-  ...localRecords('sample', earlierDecisions),
+  ...records,
+  clear() {
+    records.clear()
+    storeCreditMemoRequests([])
+  },
 }

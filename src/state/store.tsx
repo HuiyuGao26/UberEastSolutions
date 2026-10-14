@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toDeduction, toOrder } from '@/domain/mapping'
 import type { Challenge, Decision, Deduction, Order, PayoutBreakdown, Screen, Source } from '@/domain/types'
-import { mockRepository } from '@/sap/mockRepository'
+import { mockRepository, simulateMissingItemRefund } from '@/sap/mockRepository'
 import type { OrderRepository } from '@/sap/repository'
 import { sapRepository } from '@/sap/sapRepository'
 
@@ -24,6 +24,15 @@ interface AppStore {
   decide: (order: Order, accepted: boolean, shown: PayoutBreakdown) => void
   challenges: Challenge[]
   challenge: (deductionId: string, text: string) => void
+  /**
+   * The most recently accepted order, unless a report was already simulated
+   * for it. Only the sample data supports the simulation.
+   */
+  simulationTarget: Decision | undefined
+  simulateMissingItem: () => void
+  /** A deduction that has just arrived and has not been opened yet. */
+  notice: Deduction | null
+  dismissNotice: () => void
   reset: () => void
 }
 
@@ -66,7 +75,8 @@ const StoreContext = createContext<AppStore | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [source, setSourceState] = useState<Source>(initialSource)
-  const [screen, setScreen] = useState<Screen>('offers')
+  const [screen, setScreenState] = useState<Screen>('offers')
+  const [notice, setNotice] = useState<Deduction | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [orders, setOrders] = useState<Keyed<Order[]>>(null)
   const [deductions, setDeductions] = useState<Keyed<Deduction[]>>(null)
@@ -91,9 +101,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [repository, loadKey],
   )
 
+  const setScreen = useCallback((next: Screen) => {
+    setScreenState(next)
+    // Opening Payouts is how the merchant reads a new deduction.
+    if (next === 'payouts') setNotice(null)
+  }, [])
+
   const setSource = useCallback((next: Source) => {
     setSourceState(next)
-    setScreen('offers')
+    setScreenState('offers')
+    setNotice(null)
     try {
       localStorage.setItem(SOURCE_KEY, next)
     } catch {
@@ -103,6 +120,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AppStore>(() => {
     const refreshRecords = () => setRecords((all) => ({ ...all, [source]: localRecordsOf(repository) }))
+    const shownDeductions = current(deductions, loadKey)
+    const latestAccepted = records.sample.decisions.find((d) => d.accepted)
+    const simulationTarget =
+      source === 'sample' &&
+      shownDeductions.status === 'ready' &&
+      latestAccepted &&
+      !shownDeductions.value.some((d) => d.reference.kind === 'order' && d.reference.id === latestAccepted.order.id)
+        ? latestAccepted
+        : undefined
     return {
       source,
       setSource,
@@ -110,7 +136,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setScreen,
       repository,
       orders: current(orders, loadKey),
-      deductions: current(deductions, loadKey),
+      deductions: shownDeductions,
       reload: () => setAttempt((n) => n + 1),
       decisions: records[source].decisions,
       decide: (order, accepted, shown) => {
@@ -122,15 +148,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
         repository.saveChallenge({ deductionId, text, sentAt: new Date().toISOString() })
         refreshRecords()
       },
+      simulationTarget,
+      simulateMissingItem: () => {
+        if (!simulationTarget || shownDeductions.status !== 'ready') return
+        const deduction = toDeduction(simulateMissingItemRefund(simulationTarget.order))
+        setDeductions({
+          key: loadKey,
+          result: {
+            ...shownDeductions,
+            value: [deduction, ...shownDeductions.value.filter((d) => d.id !== deduction.id)],
+          },
+        })
+        setNotice(deduction)
+      },
+      notice,
+      dismissNotice: () => setNotice(null),
       reset: () => {
         mockRepository.clear()
         sapRepository.clear()
         setRecords({ sample: localRecordsOf(mockRepository), sap: localRecordsOf(sapRepository) })
-        setScreen('offers')
+        setScreenState('offers')
+        setNotice(null)
         setAttempt((n) => n + 1)
       },
     }
-  }, [source, setSource, screen, repository, orders, deductions, loadKey, records])
+  }, [source, setSource, screen, setScreen, repository, orders, deductions, loadKey, records, notice])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

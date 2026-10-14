@@ -67,39 +67,29 @@ export function mockSalesOrders(): SapSalesOrder[] {
       TransactionCurrency: 'NZD',
       _Item: [{ SalesOrderItem: '10', Product: 'BOWL-SAL', SalesOrderItemText: 'Teriyaki salmon bowl', RequestedQuantity: 1, NetAmount: 22 }],
     },
-    {
-      // Accepted before the demo starts (see EARLIER_ACCEPTED_ORDER) and delivered since.
-      SalesOrder: EARLIER_ACCEPTED_ORDER,
-      SalesOrganization: 'NZ01',
-      ...soldTo('C17764', 'Hannah K.', 'Parnell'),
-      ...placed(48),
-      TransactionCurrency: 'NZD',
-      _Item: [
-        { SalesOrderItem: '10', Product: 'KATSU-CHK', SalesOrderItemText: 'Chicken katsu bowl', RequestedQuantity: 1, NetAmount: 19.5 },
-        { SalesOrderItem: '20', Product: 'SODA-FEI', SalesOrderItemText: 'Feijoa soda', RequestedQuantity: 2, NetAmount: 10 },
-      ],
-    },
   ]
 }
 
-/** The order the merchant accepted earlier this evening, and how long ago. */
-export const EARLIER_ACCEPTED_ORDER = '4816'
-export const EARLIER_ACCEPTED_MINUTES_AGO = 46
-
-/** The customer was refunded for one missing soda on the earlier order. Reason "Z01" is a custom code. */
-export function mockCreditMemoRequests(): SapCreditMemoRequest[] {
-  return [
-    {
-      CreditMemoRequest: '60000231',
-      ...placed(6),
-      TotalNetAmount: 5,
-      TransactionCurrency: 'NZD',
-      SDDocumentReason: 'Z01',
-      ReferenceSDDocument: EARLIER_ACCEPTED_ORDER,
-      ReferenceSDDocumentCategory: 'C',
-      _Item: [{ CreditMemoRequestItem: '10', CreditMemoRequestItemText: 'Feijoa soda', RequestedQuantity: 1, NetAmount: 5 }],
-    },
-  ]
+/**
+ * The credit memo request SAP would hold after a customer is refunded for
+ * one missing item on a sales order. Reason "Z01" is a custom code.
+ */
+export function missingItemCreditMemoRequest(
+  number: string,
+  salesOrder: string,
+  currency: string,
+  item: { text: string; amount: number },
+): SapCreditMemoRequest {
+  return {
+    CreditMemoRequest: number,
+    ...placed(0),
+    TotalNetAmount: item.amount,
+    TransactionCurrency: currency,
+    SDDocumentReason: 'Z01',
+    ReferenceSDDocument: salesOrder,
+    ReferenceSDDocumentCategory: 'C',
+    _Item: [{ CreditMemoRequestItem: '10', CreditMemoRequestItemText: item.text, RequestedQuantity: 1, NetAmount: item.amount }],
+  }
 }
 
 /** A price condition: the item at menu price. */
@@ -144,6 +134,4 @@ export const MOCK_PRICING_ELEMENTS: SapPricingElement[] = [
   price('4819', '10', 19.5),
   price('4819', '20', 5),
   price('4818', '10', 22),
-  price(EARLIER_ACCEPTED_ORDER, '10', 19.5),
-  price(EARLIER_ACCEPTED_ORDER, '20', 10),
 ]

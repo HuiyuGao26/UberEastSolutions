@@ -58,7 +58,9 @@ export function PayoutsScreen() {
       )}
 
       {deductions.status === 'ready' && deductions.value.length === 0 && (
-        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">No deductions.</p>
+        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+          No deductions. Nothing has been taken from your payouts.
+        </p>
       )}
 
       {deductions.status === 'ready' && (

@@ -36,6 +36,8 @@ export interface Decision {
   decidedAt: string
   /** The breakdown on the offer at that moment; `net` is the payout the merchant was shown. */
   shown: PayoutBreakdown
+  /** Whether menu prices and promotions had loaded when the offer was answered. */
+  pricingAvailable?: boolean
 }
 
 /** A customer refund on an order, taken out of the merchant's payout. */

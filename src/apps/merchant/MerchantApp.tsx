@@ -11,7 +11,7 @@ import { acceptanceFor, canChallenge, payoutBreakdown } from '@/domain/rules'
 import type { Order, Screen } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { useApp, useOffers } from '@/state/store'
-import { OfferDialog } from './OfferDialog'
+import { AcceptedOrderDialog, OfferDialog } from './OfferDialog'
 import { PayoutsScreen } from './PayoutsScreen'
 
 const NAV: { id: Screen; label: string; icon: typeof Inbox }[] = [
@@ -71,7 +71,7 @@ export function MerchantApp() {
         </aside>
         <main className="min-w-0 flex-1 overflow-y-auto p-5">
           {screen === 'offers' && <OffersScreen offers={offers} onOpen={setOpenOrderId} />}
-          {screen === 'decided' && <DecidedScreen />}
+          {screen === 'decided' && <DecidedScreen key={repository.source} />}
           {screen === 'payouts' && <PayoutsScreen />}
         </main>
       </div>
@@ -206,15 +206,24 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
 }
 
 function DecidedScreen() {
-  const { decisions, deductions, setScreen } = useApp()
-  const deducted = (orderId: string) =>
+  const { decisions, deductions, challenges, setScreen } = useApp()
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null)
+  const orderDeductions = (order: Order) =>
     deductions.status === 'ready'
-      ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === orderId).reduce((sum, d) => sum + d.amount, 0)
-      : 0
+      ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === order.id && d.currency === order.currency)
+      : []
+  const deducted = (order: Order) => orderDeductions(order).reduce((sum, d) => sum + d.amount, 0)
   const accepted = decisions.filter((d) => d.accepted)
-  const currency = decisions[0]?.order.currency
-  const expected = accepted.reduce((sum, d) => sum + d.shown.net, 0)
-  const totalDeducted = accepted.reduce((sum, d) => sum + deducted(d.order.id), 0)
+  const openDecision = accepted.find((d) => d.order.id === openOrderId)
+  const currencies = [...new Set((accepted.length ? accepted : decisions).map((d) => d.order.currency))]
+  const totals = currencies.map((currency) => {
+    const orders = accepted.filter((d) => d.order.currency === currency)
+    return {
+      currency,
+      expected: orders.reduce((sum, d) => sum + d.shown.net, 0),
+      deducted: orders.reduce((sum, d) => sum + deducted(d.order), 0),
+    }
+  })
 
   if (decisions.length === 0) {
     return (
@@ -239,11 +248,24 @@ function DecidedScreen() {
 
       <Card size="sm" className="max-w-xs">
         <CardContent>
-          <p className="text-xs text-muted-foreground">Expected payout from accepted orders</p>
-          <p className="text-2xl font-semibold">{currency ? money(expected, currency) : '—'}</p>
+          <p className="text-xs text-muted-foreground">Expected payout after deductions</p>
+          {deductions.status === 'ready' ? totals.map((total) => (
+            <div key={total.currency}>
+              <p className="text-2xl font-semibold">{money(total.expected - total.deducted, total.currency)}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {money(total.expected, total.currency)} shown at acceptance · {money(total.deducted, total.currency)} deducted
+              </p>
+            </div>
+          )) : (
+            <>
+              <p className="text-2xl font-semibold">—</p>
+              <p className="text-[11px] text-muted-foreground">
+                {deductions.status === 'loading' ? 'Loading deductions…' : 'Could not load deductions.'}
+              </p>
+            </>
+          )}
           <p className="text-[11px] text-muted-foreground">
             {accepted.length} accepted · {decisions.length - accepted.length} declined
-            {totalDeducted > 0 && currency && <> · {money(totalDeducted, currency)} deducted since</>}
           </p>
         </CardContent>
       </Card>
@@ -259,33 +281,58 @@ function DecidedScreen() {
             <TableHead className="text-right">Fee</TableHead>
             <TableHead className="text-right">Payout shown</TableHead>
             <TableHead className="text-right">Deducted</TableHead>
+            <TableHead className="text-right">Challenge status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {decisions.map((d) => (
-            <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
-              <TableCell className="font-medium">{d.order.id}</TableCell>
-              <TableCell>{dayAndTime(d.decidedAt)}</TableCell>
-              <TableCell>{d.order.customer}</TableCell>
-              <TableCell className="text-right">{itemCount(d.order)}</TableCell>
-              <TableCell>
-                <Badge variant={d.accepted ? 'default' : 'outline'}>{d.accepted ? 'Accepted' : 'Declined'}</Badge>
-              </TableCell>
-              <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
-              <TableCell className="text-right font-mono font-medium">{d.accepted ? money(d.shown.net, d.order.currency) : '—'}</TableCell>
-              <TableCell className="text-right font-mono">
-                {deducted(d.order.id) > 0 ? (
-                  <button className="text-destructive underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
-                    {signedMoney(-deducted(d.order.id), d.order.currency)}
-                  </button>
-                ) : (
-                  '—'
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
+          {decisions.map((d) => {
+            const refunds = orderDeductions(d.order)
+            const sentCount = refunds.filter((refund) => challenges.some((c) => c.deductionId === refund.id)).length
+            return (
+              <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
+                <TableCell className="font-medium">
+                  {d.accepted ? (
+                    <button
+                      className="text-primary underline underline-offset-2 hover:no-underline"
+                      aria-label={`View order ${d.order.id} details`}
+                      onClick={() => setOpenOrderId(d.order.id)}
+                    >
+                      {d.order.id}
+                    </button>
+                  ) : d.order.id}
+                </TableCell>
+                <TableCell>{dayAndTime(d.decidedAt)}</TableCell>
+                <TableCell>{d.order.customer}</TableCell>
+                <TableCell className="text-right">{itemCount(d.order)}</TableCell>
+                <TableCell>
+                  <Badge variant={d.accepted ? 'default' : 'outline'}>{d.accepted ? 'Accepted' : 'Declined'}</Badge>
+                </TableCell>
+                <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
+                <TableCell className="text-right font-mono font-medium">{d.accepted ? money(d.shown.net, d.order.currency) : '—'}</TableCell>
+                <TableCell className="text-right font-mono">
+                  {d.accepted && deductions.status !== 'ready' ? (deductions.status === 'loading' ? 'Loading…' : 'Unavailable') : deducted(d.order) > 0 ? (
+                    <button className="text-destructive underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
+                      {signedMoney(-deducted(d.order), d.order.currency)}
+                    </button>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {!d.accepted ? <span className="font-mono">—</span> : deductions.status !== 'ready' ? (
+                    deductions.status === 'loading' ? 'Loading…' : 'Unavailable'
+                  ) : refunds.length === 0 ? <span className="font-mono">—</span> : (
+                    <Badge variant={sentCount > 0 ? 'secondary' : 'outline'}>
+                      {sentCount === 0 ? 'Not submitted' : sentCount === refunds.length ? 'Challenge sent' : `${sentCount}/${refunds.length} sent`}
+                    </Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
+      {openDecision && <AcceptedOrderDialog decision={openDecision} onClose={() => setOpenOrderId(null)} />}
     </div>
   )
 }

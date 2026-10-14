@@ -52,6 +52,30 @@ async function waitForText(expected, timeout = 30_000) {
   await page.waitForFunction((t) => document.body.innerText.includes(t), { timeout }, expected)
 }
 
+async function expectAcceptedSummary(amount, deducted) {
+  const summary = await page.evaluate(() => [...document.querySelectorAll('[data-slot="card"]')]
+    .find((card) => card.textContent.includes('Expected payout after deductions'))?.innerText)
+  if (!summary?.includes(amount) || !summary.includes(`$39.06 shown at acceptance · ${deducted} deducted`)) {
+    throw new Error(`Unexpected accepted payout summary: ${summary}`)
+  }
+}
+
+async function expectSavedOrderDetails() {
+  await page.click('[aria-label="View order 4821 details"]')
+  const dialog = await page.$eval('[role="dialog"]', (el) => ({
+    text: el.innerText,
+    buttons: [...el.querySelectorAll('button')].map((button) => button.textContent.trim()),
+  }))
+  for (const value of ['Order 4821', 'Chicken katsu bowl', 'Feijoa soda', 'Items at menu price', '$57.50', '−$1.70', '$55.80', '−$16.74', '$39.06']) {
+    if (!dialog.text.includes(value)) throw new Error(`Saved order details are missing: ${value}`)
+  }
+  if (dialog.buttons.some((label) => label.includes('Accept') || label.includes('Decline'))) {
+    throw new Error('Saved order details allow another order decision')
+  }
+  await click('Close')
+  if (await page.$('[role="dialog"]')) throw new Error('Close did not dismiss saved order details')
+}
+
 const SIMULATE = 'Simulate: customer reports a missing item'
 
 // --- Sample data ---------------------------------------------------------------
@@ -82,6 +106,10 @@ await expectText('−$16.74')
 await shot('02-sample-offer')
 await click('Accept order')
 await expectText('About order 4821')
+await click('Accepted')
+await expectAcceptedSummary('$39.06', '$0.00')
+await expectSavedOrderDetails()
+await click('New orders')
 
 // 2. The customer reports a missing item: the merchant is told without being interrupted.
 await click(SIMULATE)
@@ -109,6 +137,13 @@ await expectText('Outcome due by:')
 if ((await text()).includes('−$5.00 on order 4821')) throw new Error('The notice should close when Payouts is opened')
 await shot('04-sample-deduction')
 
+await click('Accepted')
+await expectAcceptedSummary('$34.06', '$5.00')
+await expectText('Not submitted')
+await expectSavedOrderDetails() // The acceptance snapshot stays $39.06 after the deduction.
+await shot('04a-sample-accepted-deduction')
+await click('Payouts')
+
 await click('Challenge this deduction')
 await page.type('textarea', 'Both sodas were packed. Our packing photo shows them in the sealed bag.')
 await shot('05-sample-challenge-form')
@@ -121,6 +156,8 @@ await shot('06-sample-challenge-sent')
 await click('Accepted')
 await expectText('1 accepted · 0 declined')
 await expectText('−$5.00')
+await expectText('Challenge sent')
+await expectAcceptedSummary('$34.06', '$5.00') // Submitting a challenge does not reverse the deduction.
 await shot('07-sample-accepted')
 
 await page.reload({ waitUntil: 'networkidle0' })
@@ -128,6 +165,10 @@ await waitForText('Order 4820')
 if ((await text()).includes('Order 4821')) throw new Error('An accepted order came back as an offer after a reload')
 await click('Payouts')
 await waitForText('Challenge sent')
+await click('Accepted')
+await expectText('Challenge sent')
+await expectAcceptedSummary('$34.06', '$5.00')
+await expectSavedOrderDetails()
 
 await click('How the data is read')
 await waitForText('Where each value comes from')

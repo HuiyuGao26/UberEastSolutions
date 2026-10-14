@@ -21,7 +21,7 @@ interface AppStore {
   deductions: Loaded<Deduction[]>
   reload: () => void
   decisions: Decision[]
-  decide: (order: Order, accepted: boolean, shown: PayoutBreakdown) => void
+  decide: (order: Order, accepted: boolean, shown: PayoutBreakdown, pricingAvailable?: boolean) => void
   challenges: Challenge[]
   challenge: (deductionId: string, text: string) => void
   /**
@@ -139,8 +139,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       deductions: shownDeductions,
       reload: () => setAttempt((n) => n + 1),
       decisions: records[source].decisions,
-      decide: (order, accepted, shown) => {
-        repository.saveDecision({ order, accepted, decidedAt: new Date().toISOString(), shown })
+      decide: (order, accepted, shown, pricingAvailable) => {
+        repository.saveDecision({ order, accepted, decidedAt: new Date().toISOString(), shown, pricingAvailable })
         refreshRecords()
       },
       challenges: records[source].challenges,

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BellRing, Info, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,7 @@ import { DeviceModal } from '@/components/shared/DeviceFrame'
 import { dayAndTime, itemCount, money, percent, signedMoney } from '@/domain/format'
 import { withPricing } from '@/domain/mapping'
 import { payoutBreakdown } from '@/domain/rules'
-import type { Order } from '@/domain/types'
+import type { Decision, Order, PayoutBreakdown } from '@/domain/types'
 import { useApp } from '@/state/store'
 
 type Pricing = 'loading' | 'ready' | 'unavailable'
@@ -47,6 +47,71 @@ export function OfferDialog({ order: offer, onClose }: { order: Order; onClose: 
   const b = payoutBreakdown(order)
   const cur = order.currency
 
+  return (
+    <OrderDetailsDialog order={order} breakdown={b} pricing={pricing} onClose={onClose}>
+      <div className="mt-4 grid grid-cols-[1fr_2fr] gap-3 border-t bg-muted/30 p-4">
+        <Button
+          variant="outline"
+          size="lg"
+          className="h-12 text-base"
+          onClick={() => {
+            decide(order, false, b, pricing === 'ready')
+            toast(`Declined order ${order.id}`)
+            onClose()
+          }}
+        >
+          Decline
+        </Button>
+        <Button
+          size="lg"
+          className="h-12 text-base"
+          autoFocus
+          onClick={() => {
+            decide(order, true, b, pricing === 'ready')
+            toast.success(`Accepted order ${order.id}: expected payout ${money(b.net, cur)}`, {
+              action: { label: 'View accepted', onClick: () => setScreen('decided') },
+            })
+            onClose()
+          }}
+        >
+          Accept order · {money(b.net, cur)}
+        </Button>
+      </div>
+    </OrderDetailsDialog>
+  )
+}
+
+/** Reuses the offer layout with the saved acceptance snapshot, without another SAP read. */
+export function AcceptedOrderDialog({ decision, onClose }: { decision: Decision; onClose: () => void }) {
+  // Older records do not have the flag; a saved promotion proves that pricing was read.
+  const pricingAvailable = decision.pricingAvailable ?? (decision.shown.promo > 0)
+  return (
+    <OrderDetailsDialog
+      order={decision.order}
+      breakdown={decision.shown}
+      pricing={pricingAvailable ? 'ready' : 'unavailable'}
+      onClose={onClose}
+      readOnly
+    >
+      <div className="mt-4 flex justify-end border-t bg-muted/30 p-4">
+        <Button size="lg" className="h-12 text-base" autoFocus onClick={onClose}>
+          Close
+        </Button>
+      </div>
+    </OrderDetailsDialog>
+  )
+}
+
+function OrderDetailsDialog({ order, breakdown: b, pricing, onClose, readOnly = false, children }: {
+  order: Order
+  breakdown: PayoutBreakdown
+  pricing: Pricing
+  onClose: () => void
+  readOnly?: boolean
+  children: ReactNode
+}) {
+  const cur = order.currency
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
@@ -66,7 +131,7 @@ export function OfferDialog({ order: offer, onClose }: { order: Order; onClose: 
           <span className="text-xs text-zinc-300">
             {order.customer} · placed {dayAndTime(order.placedAt)}
           </span>
-          <button onClick={onClose} aria-label="Close without answering" className="rounded-md p-1 text-zinc-300 hover:bg-white/10 hover:text-white">
+          <button onClick={onClose} aria-label={readOnly ? 'Close order details' : 'Close without answering'} className="rounded-md p-1 text-zinc-300 hover:bg-white/10 hover:text-white">
             <X className="size-4" />
           </button>
         </div>
@@ -110,39 +175,14 @@ export function OfferDialog({ order: offer, onClose }: { order: Order; onClose: 
       <p className="flex gap-1.5 px-5 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          Shown before you accept. The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
-          {pricing === 'unavailable' && ' The split into menu price and promotion could not be read; the payout is unaffected.'}
+          {readOnly ? 'Saved when you accepted this order.' : 'Shown before you accept.'} The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
+          {pricing === 'unavailable' && (readOnly
+            ? ' The saved record does not confirm the split into menu price and promotion; the payout shown at acceptance is preserved.'
+            : ' The split into menu price and promotion could not be read; the payout is unaffected.')}
         </span>
       </p>
 
-      <div className="mt-4 grid grid-cols-[1fr_2fr] gap-3 border-t bg-muted/30 p-4">
-        <Button
-          variant="outline"
-          size="lg"
-          className="h-12 text-base"
-          onClick={() => {
-            decide(order, false, b)
-            toast(`Declined order ${order.id}`)
-            onClose()
-          }}
-        >
-          Decline
-        </Button>
-        <Button
-          size="lg"
-          className="h-12 text-base"
-          autoFocus
-          onClick={() => {
-            decide(order, true, b)
-            toast.success(`Accepted order ${order.id}: expected payout ${money(b.net, cur)}`, {
-              action: { label: 'View accepted', onClick: () => setScreen('decided') },
-            })
-            onClose()
-          }}
-        >
-          Accept order · {money(b.net, cur)}
-        </Button>
-      </div>
+      {children}
     </DeviceModal>
   )
 }

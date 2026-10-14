@@ -47,8 +47,10 @@ await page.goto(`${URL}?source=sample`, { waitUntil: 'networkidle0' })
 await page.evaluate(() => localStorage.clear())
 await page.reload({ waitUntil: 'networkidle0' })
 
+// 1. An order offer shows the expected payout before it is accepted.
 await waitForText('Order 4821')
 await expectText('$39.06') // (57.50 − 1.70 promotion) × 70%
+if ((await text()).includes('Order 4816')) throw new Error('The order accepted earlier is offered again')
 await shot('01-sample-offers')
 
 await click('Review offer')
@@ -60,41 +62,61 @@ await expectText('−$16.74')
 await shot('02-sample-offer')
 
 await click('Accept order')
-await shot('03-sample-after-accept')
 await click('Review offer')
 await click('Decline')
 await click('Accepted')
 await expectText('Payout shown')
 await expectText('$39.06')
-await expectText('1 accepted · 1 declined')
-await shot('04-sample-accepted')
+await expectText('2 accepted · 1 declined') // order 4816 was accepted before the demo starts
+await shot('03-sample-accepted')
+
+// 2. A deduction shows its reason the same day and can be challenged.
+await click('Payouts')
+await waitForText('order 4816')
+await expectText('Customer reported a missing item: 1 × Feijoa soda')
+await expectText('$20.65 → $15.65') // (19.50 + 10.00) × 70% = 20.65, less the 5.00 refund
+await expectText('Challenge by:')
+await expectText('Outcome due by:')
+await shot('04-sample-deduction')
+
+await click('Challenge this deduction')
+await page.type('textarea', 'Both sodas were packed. Our packing photo shows them in the sealed bag.')
+await shot('05-sample-challenge-form')
+await click('Send challenge')
+await expectText('Challenge sent')
+await expectText('Both sodas were packed.')
+await shot('06-sample-challenge-sent')
 
 await page.reload({ waitUntil: 'networkidle0' })
 await waitForText('Order 4819')
 if ((await text()).includes('Order 4821')) throw new Error('An accepted order came back as an offer after a reload')
+await click('Payouts')
+await waitForText('Challenge sent')
 
 await click('How the data is read')
 await waitForText('Where each value comes from')
-await shot('05-sample-how-data-is-read')
+await shot('07-sample-how-data-is-read')
 await page.keyboard.press('Escape')
 await sleep(300)
 
 // --- Live SAP sandbox ----------------------------------------------------------
 if (!process.env.E2E_SKIP_SAP) {
   await click('SAP sandbox')
-  await shot('06-sap-loading')
   await waitForText('Review offer', 60_000)
-  await shot('07-sap-offers')
+  await shot('08-sap-offers')
   await click('Review offer')
   await waitForText('Items at menu price', 60_000)
-  await shot('08-sap-offer')
+  await shot('09-sap-offer')
   await click('Accept order')
   await click('Accepted')
   await expectText('Payout shown')
-  await shot('09-sap-accepted')
+  await click('Payouts')
+  await waitForText('Challenge window closed', 60_000)
+  await expectText('SAP order reason')
+  await shot('10-sap-deductions')
   await click('How the data is read')
   await waitForText('SAP sandbox (live)')
-  await shot('10-sap-how-data-is-read')
+  await shot('11-sap-how-data-is-read')
 }
 
 await browser.close()

@@ -1,9 +1,10 @@
 /** Reads from the live SAP Business Accelerator Hub sandbox. */
 import { SERVICES, getJson, odataUrl, type ODataList } from './client'
-import { localDecisions, type OrderRepository } from './repository'
-import type { SapPricingElement, SapSalesOrder } from './types'
+import { localRecords, type OrderRepository } from './repository'
+import type { SapCreditMemoRequest, SapPricingElement, SapSalesOrder } from './types'
 
 const ORDER_COUNT = 8
+const CREDIT_MEMO_REQUEST_COUNT = 6
 
 const ORDER_QUERY = {
   $top: ORDER_COUNT,
@@ -19,6 +20,14 @@ const PRICING_QUERY = {
     'SalesOrder,SalesOrderItem,PricingProcedureStep,ConditionType,PriceElementDescription,ConditionClass,ConditionAmount,ConditionInactiveReason,ConditionIsForStatistics',
 }
 
+const CREDIT_MEMO_REQUEST_QUERY = {
+  $top: CREDIT_MEMO_REQUEST_COUNT,
+  $orderby: 'CreationDate desc,CreditMemoRequest desc',
+  $select:
+    'CreditMemoRequest,CreationDate,CreationTime,TotalNetAmount,TransactionCurrency,SDDocumentReason,ReferenceSDDocument,ReferenceSDDocumentCategory',
+  $expand: '_Item($select=CreditMemoRequestItem,CreditMemoRequestItemText,RequestedQuantity,NetAmount)',
+}
+
 // SAP allows pricing elements to be read for one order item per request.
 function pricingPath(salesOrder: string, salesOrderItem: string): string {
   return `SalesOrderItem(SalesOrder='${salesOrder}',SalesOrderItem='${salesOrderItem}')/_ItemPricingElement`
@@ -30,6 +39,10 @@ export const sapRepository: OrderRepository = {
   requests: [
     { label: 'Orders, items and customers', request: `GET ${odataUrl(SERVICES.salesOrder, 'SalesOrder', ORDER_QUERY)}` },
     { label: 'Prices and discounts of one item', request: `GET ${odataUrl(SERVICES.salesOrder, pricingPath('{order}', '{item}'), PRICING_QUERY)}` },
+    {
+      label: 'Customer refunds (deductions)',
+      request: `GET ${odataUrl(SERVICES.creditMemoRequest, 'CreditMemoRequest', CREDIT_MEMO_REQUEST_QUERY)}`,
+    },
   ],
 
   async listSalesOrders(signal) {
@@ -43,5 +56,11 @@ export const sapRepository: OrderRepository = {
     return data.value
   },
 
-  ...localDecisions('sap'),
+  async listCreditMemoRequests(signal) {
+    const url = odataUrl(SERVICES.creditMemoRequest, 'CreditMemoRequest', CREDIT_MEMO_REQUEST_QUERY)
+    const data = await getJson<ODataList<SapCreditMemoRequest>>(url, signal)
+    return data.value
+  },
+
+  ...localRecords('sap'),
 }

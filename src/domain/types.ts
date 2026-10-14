@@ -38,4 +38,23 @@ export interface Decision {
   shown: PayoutBreakdown
 }
 
-export type Screen = 'offers' | 'decided'
+/** A customer refund on an order, taken out of the merchant's payout. */
+export interface Deduction {
+  id: string
+  createdAt: string
+  amount: number
+  currency: string
+  reason: string
+  /** The document the refund was made against, usually the order. */
+  reference: { kind: 'order' | 'invoice' | 'return' | 'document'; id: string }
+  lines: { name: string; qty: number; amount: number }[]
+}
+
+/** The merchant's challenge to a deduction. */
+export interface Challenge {
+  deductionId: string
+  text: string
+  sentAt: string
+}
+
+export type Screen = 'offers' | 'decided' | 'payouts'

@@ -1,54 +1,73 @@
 /**
- * The app's wrapper around the SAP Sales Order API. Screens only talk to
- * this interface, so the sample data and the live SAP sandbox can be
- * swapped without touching them.
+ * The app's wrapper around the SAP APIs. Screens only talk to this
+ * interface, so the sample data and the live SAP sandbox can be swapped
+ * without touching them.
  */
-import type { Decision, Source } from '@/domain/types'
-import type { SapPricingElement, SapSalesOrder } from './types'
+import type { Challenge, Decision, Source } from '@/domain/types'
+import type { SapCreditMemoRequest, SapPricingElement, SapSalesOrder } from './types'
 
 export interface OrderRepository {
   readonly source: Source
   readonly merchant: { name: string; detail: string }
-  /** The requests behind the two read methods, for the "How the data is read" panel. */
+  /** The requests behind the read methods, for the "How the data is read" panel. */
   readonly requests: { label: string; request: string }[]
 
-  /** Newest sales orders with their items and partners. */
+  /** Sales Order API: newest sales orders with their items and partners. */
   listSalesOrders(signal?: AbortSignal): Promise<SapSalesOrder[]>
-  /** Price and discount conditions of one order item. */
+  /** Sales Order API: price and discount conditions of one order item. */
   listItemPricingElements(salesOrder: string, salesOrderItem: string, signal?: AbortSignal): Promise<SapPricingElement[]>
+  /** Credit Memo Request API: newest customer credits with their items. */
+  listCreditMemoRequests(signal?: AbortSignal): Promise<SapCreditMemoRequest[]>
 
   /** The merchant's accept and decline decisions. */
   listDecisions(): Decision[]
   saveDecision(decision: Decision): void
-  clearDecisions(): void
+  /** The merchant's challenges to deductions. */
+  listChallenges(): Challenge[]
+  saveChallenge(challenge: Challenge): void
+  /** Forgets everything the merchant did. */
+  clear(): void
 }
 
+type LocalRecords = Pick<OrderRepository, 'listDecisions' | 'saveDecision' | 'listChallenges' | 'saveChallenge' | 'clear'>
+
 /**
- * Decisions are kept in the browser for both repositories. The Sales Order
- * API has no field for "amount shown at acceptance", and the sandbox only
- * allows GET (writes return HTTP 405). Against a writable S/4HANA system,
- * saveDecision would update the sales order instead.
+ * What the merchant does is kept in the browser for both repositories. The
+ * sandbox only allows GET (writes return HTTP 405), and neither API has a
+ * field for "amount shown at acceptance" or for a challenge. Against a
+ * company's own S/4HANA system these would be written back instead.
+ *
+ * `earlierDecisions` are orders accepted before the demo starts.
  */
-export function localDecisions(source: Source): Pick<OrderRepository, 'listDecisions' | 'saveDecision' | 'clearDecisions'> {
-  const key = `order-care:decisions:${source}`
-  const read = (): Decision[] => {
+export function localRecords(source: Source, earlierDecisions: () => Decision[] = () => []): LocalRecords {
+  const key = (name: string) => `order-care:${name}:${source}`
+  function read<T>(name: string): T[] {
     try {
-      return JSON.parse(localStorage.getItem(key) ?? '[]') as Decision[]
+      return JSON.parse(localStorage.getItem(key(name)) ?? '[]') as T[]
     } catch {
-      // Storage can be unavailable (private window); start with no decisions.
+      // Storage can be unavailable (private window); start empty.
       return []
     }
   }
-  const write = (decisions: Decision[]) => {
+  function write<T>(name: string, records: T[]) {
     try {
-      localStorage.setItem(key, JSON.stringify(decisions))
+      localStorage.setItem(key(name), JSON.stringify(records))
     } catch {
       // Ignore: the app still works without persistence.
     }
   }
   return {
-    listDecisions: read,
-    saveDecision: (decision) => write([decision, ...read().filter((d) => d.order.id !== decision.order.id)]),
-    clearDecisions: () => write([]),
+    listDecisions: () => {
+      const own = read<Decision>('decisions')
+      return [...own, ...earlierDecisions().filter((d) => !own.some((o) => o.order.id === d.order.id))]
+    },
+    saveDecision: (decision) => write('decisions', [decision, ...read<Decision>('decisions').filter((d) => d.order.id !== decision.order.id)]),
+    listChallenges: () => read<Challenge>('challenges'),
+    saveChallenge: (challenge) =>
+      write('challenges', [challenge, ...read<Challenge>('challenges').filter((c) => c.deductionId !== challenge.deductionId)]),
+    clear: () => {
+      write('decisions', [])
+      write('challenges', [])
+    },
   }
 }

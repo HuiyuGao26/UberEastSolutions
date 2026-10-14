@@ -19,7 +19,7 @@ export function signedMoney(value: number, currency: string): string {
 const dayFormat = new Intl.DateTimeFormat('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
 const timeFormat = new Intl.DateTimeFormat('en-NZ', { hour: 'numeric', minute: '2-digit' })
 
-function day(value: string | Date): string {
+export function day(value: string | Date): string {
   return dayFormat.format(new Date(value))
 }
 

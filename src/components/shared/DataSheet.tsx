@@ -5,20 +5,35 @@ import { percent } from '@/domain/format'
 import { FEE_RATE } from '@/domain/rules'
 import { useApp } from '@/state/store'
 
-/** Where each value on the merchant screens comes from in the Sales Order API. */
-const FIELD_MAP: [onScreen: string, sapField: string][] = [
-  ['Order number', 'SalesOrder'],
-  ['Placed', 'CreationDate + CreationTime'],
-  ['Customer', '_Partner (sold-to): BusinessPartnerName1, CityName'],
-  ['Item name and quantity', '_Item: SalesOrderItemText, RequestedQuantity'],
-  ['Menu price', '_ItemPricingElement where ConditionClass = B (price)'],
-  ['Your promotion', 'Menu price − NetAmount (discount conditions)'],
-  ['Fee basis', '_Item: NetAmount'],
+/** Where each value on the merchant screens comes from in the two SAP APIs. */
+const FIELD_MAP: { api: string; fields: [onScreen: string, sapField: string][] }[] = [
+  {
+    api: 'Sales Order API',
+    fields: [
+      ['Order number', 'SalesOrder'],
+      ['Placed', 'CreationDate + CreationTime'],
+      ['Customer', '_Partner (sold-to): BusinessPartnerName1, CityName'],
+      ['Item name and quantity', '_Item: SalesOrderItemText, RequestedQuantity'],
+      ['Menu price', '_ItemPricingElement where ConditionClass = B (price)'],
+      ['Your promotion', 'Menu price − NetAmount (discount conditions)'],
+      ['Fee basis', '_Item: NetAmount'],
+    ],
+  },
+  {
+    api: 'Credit Memo Request API',
+    fields: [
+      ['Deduction amount', 'TotalNetAmount'],
+      ['Deducted on', 'CreationDate + CreationTime'],
+      ['Reason', 'SDDocumentReason (a code)'],
+      ['Order it was made against', 'ReferenceSDDocument'],
+      ['Refunded items', '_Item: CreditMemoRequestItemText, RequestedQuantity'],
+    ],
+  },
 ]
 
 /** Explains the SAP API wrapper: what is read, from where, and what the app adds. */
 export function DataSheet() {
-  const { source, repository, orders } = useApp()
+  const { source, repository, orders, deductions } = useApp()
 
   return (
     <Sheet>
@@ -31,18 +46,19 @@ export function DataSheet() {
         <SheetHeader>
           <SheetTitle>How the data is read</SheetTitle>
           <SheetDescription>
-            The screens read orders through one wrapper around the SAP Sales Order API (OData V4). Two versions of it can be switched in the top
-            bar: sample data in the API’s format, and the live SAP sandbox.
+            The screens read through one wrapper around two SAP APIs (OData V4): Sales Order and Credit Memo Request. Two versions of it can be
+            switched in the top bar: sample data in the APIs’ format, and the live SAP sandbox.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-6">
           <section className="space-y-1.5">
             <h3 className="font-medium">Now reading from: {source === 'sap' ? 'SAP sandbox (live)' : 'Sample data'}</h3>
-            {orders.status === 'ready' && (
+            {orders.status === 'ready' && deductions.status === 'ready' && (
               <p className="text-muted-foreground">
-                {orders.orders.length} orders loaded{source === 'sap' ? ` in ${(orders.ms / 1000).toFixed(1)} s` : ''}.
-                {source === 'sap' && ' These are SAP’s own demo orders, not Uber Eats orders.'}
+                {orders.value.length} orders and {deductions.value.length} credit memo requests loaded
+                {source === 'sap' ? ` in ${(Math.max(orders.ms, deductions.ms) / 1000).toFixed(1)} s` : ''}.
+                {source === 'sap' && ' These are SAP’s own demo records, not Uber Eats data.'}
               </p>
             )}
             {orders.status === 'error' && <p className="text-destructive">{orders.message}</p>}
@@ -59,20 +75,21 @@ export function DataSheet() {
           <section className="space-y-1.5">
             <h3 className="font-medium">Where each value comes from</h3>
             <table className="w-full text-left text-xs">
-              <thead className="text-muted-foreground">
-                <tr>
-                  <th className="py-1 pr-3 font-medium">On screen</th>
-                  <th className="py-1 font-medium">Sales Order API</th>
-                </tr>
-              </thead>
-              <tbody>
-                {FIELD_MAP.map(([onScreen, sapField]) => (
-                  <tr key={onScreen} className="border-t align-top">
-                    <td className="py-1.5 pr-3 whitespace-nowrap">{onScreen}</td>
-                    <td className="py-1.5 font-mono text-[11px]">{sapField}</td>
+              {FIELD_MAP.map((group) => (
+                <tbody key={group.api}>
+                  <tr>
+                    <th colSpan={2} className="pt-2 pb-1 font-medium text-muted-foreground">
+                      {group.api}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
+                  {group.fields.map(([onScreen, sapField]) => (
+                    <tr key={onScreen} className="border-t align-top">
+                      <td className="py-1.5 pr-3 whitespace-nowrap">{onScreen}</td>
+                      <td className="py-1.5 font-mono text-[11px]">{sapField}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              ))}
             </table>
           </section>
 
@@ -84,8 +101,13 @@ export function DataSheet() {
                 fee basis × {percent(FEE_RATE)} (an illustrative rate), and payout = fee basis − fee.
               </li>
               <li>
-                <span className="text-foreground">Accept and decline.</span> The sandbox only allows reading, so your answer and the payout you
-                were shown are kept in this browser. With a company’s own SAP system they would be written back to the order.
+                <span className="text-foreground">Accept, decline and challenge.</span> The sandbox only allows reading, and neither API takes
+                a challenge. Your answers, the payout you were shown and your challenges are kept in this browser. With a company’s own SAP
+                system they would be written back.
+              </li>
+              <li>
+                <span className="text-foreground">Reason texts.</span> SAP returns a reason code only. The sample data uses its own codes with
+                texts; codes from the sandbox are shown as they are.
               </li>
             </ul>
           </section>

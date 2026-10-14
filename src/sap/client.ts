@@ -7,6 +7,7 @@ const ROOT = 'https://sandbox.api.sap.com/s4hanacloud/sap/opu/odata4/sap'
 
 export const SERVICES = {
   salesOrder: `${ROOT}/api_salesorder/srvd_a2x/sap/salesorder/0001`,
+  creditMemoRequest: `${ROOT}/api_creditmemorequest/srvd_a2x/sap/creditmemorequest/0001`,
 }
 
 /** Set in .env.local (see .env.example). */

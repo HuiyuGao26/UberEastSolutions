@@ -1,7 +1,8 @@
 /**
- * The parts of the SAP Sales Order API (OData V4, CE_SALESORDER_0001) that
- * this app reads. Field names and types follow the API's metadata, so the
- * mock data and the live sandbox return the same shapes.
+ * The parts of two SAP OData V4 APIs that this app reads: Sales Order
+ * (CE_SALESORDER_0001) and Credit Memo Request (CE_CREDITMEMOREQUEST_0001).
+ * Field names and types follow the APIs' metadata, so the mock data and the
+ * live sandbox return the same shapes.
  */
 
 export interface SapSalesOrderItem {
@@ -45,4 +46,27 @@ export interface SapPricingElement {
   ConditionAmount: number
   ConditionInactiveReason: string | null
   ConditionIsForStatistics: boolean | null
+}
+
+export interface SapCreditMemoRequestItem {
+  CreditMemoRequestItem: string
+  CreditMemoRequestItemText: string
+  RequestedQuantity: number
+  NetAmount: number
+}
+
+/** A request to credit a customer, for example after a complaint about an order. */
+export interface SapCreditMemoRequest {
+  CreditMemoRequest: string
+  CreationDate: string
+  CreationTime: string
+  TotalNetAmount: number
+  TransactionCurrency: string
+  /** Order reason code. The API returns only the code; its text is configured per SAP system. */
+  SDDocumentReason: string
+  /** The document being credited. */
+  ReferenceSDDocument: string
+  /** "C" is a sales order, "M" an invoice, "H" a return. */
+  ReferenceSDDocumentCategory: string
+  _Item: SapCreditMemoRequestItem[]
 }

@@ -1,7 +1,7 @@
-/** Turns Sales Order API records into what the merchant screens show. */
-import type { SapPricingElement, SapSalesOrder } from '@/sap/types'
+/** Turns SAP API records into what the merchant screens show. */
+import type { SapCreditMemoRequest, SapPricingElement, SapSalesOrder } from '@/sap/types'
 import { round2 } from './format'
-import type { Order, OrderLine } from './types'
+import type { Deduction, Order, OrderLine } from './types'
 
 const SOLD_TO_PARTY = 'AG'
 
@@ -32,4 +32,29 @@ export function withPricing(line: OrderLine, elements: SapPricingElement[]): Ord
   const list = prices.reduce((sum, e) => sum + e.ConditionAmount, 0)
   // A list price at or below the net value means there is no promotion to show.
   return list > net ? { ...line, listAmount: round2(list), promoAmount: round2(list - net) } : line
+}
+
+const REFERENCE_KIND: Record<string, Deduction['reference']['kind']> = { C: 'order', M: 'invoice', H: 'return' }
+
+/**
+ * Texts for the order reason codes used in the sample data ("Z" marks a
+ * custom code). SAP returns only the code, and each SAP system configures
+ * its own texts, so codes from the sandbox are shown as they are.
+ */
+const REASON_TEXT: Record<string, string> = {
+  Z01: 'Customer reported a missing item',
+  Z02: 'Customer reported a wrong item',
+}
+
+export function toDeduction(cmr: SapCreditMemoRequest): Deduction {
+  const reason = REASON_TEXT[cmr.SDDocumentReason] ?? (cmr.SDDocumentReason ? `SAP order reason ${cmr.SDDocumentReason}` : 'No reason code')
+  return {
+    id: cmr.CreditMemoRequest,
+    createdAt: `${cmr.CreationDate}T${cmr.CreationTime}`,
+    amount: cmr.TotalNetAmount,
+    currency: cmr.TransactionCurrency,
+    reason,
+    reference: { kind: REFERENCE_KIND[cmr.ReferenceSDDocumentCategory] ?? 'document', id: cmr.ReferenceSDDocument },
+    lines: cmr._Item.map((item) => ({ name: item.CreditMemoRequestItemText, qty: item.RequestedQuantity, amount: item.NetAmount })),
+  }
 }

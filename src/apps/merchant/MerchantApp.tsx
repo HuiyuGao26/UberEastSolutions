@@ -1,29 +1,41 @@
 import { useState } from 'react'
-import { ClipboardCheck, Inbox, RefreshCw, TriangleAlert } from 'lucide-react'
+import { ClipboardCheck, Inbox, RefreshCw, TriangleAlert, Wallet } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { TabletFrame } from '@/components/shared/DeviceFrame'
-import { dayAndTime, itemCount, money, percent } from '@/domain/format'
-import { payoutBreakdown } from '@/domain/rules'
+import { dayAndTime, itemCount, money, percent, signedMoney } from '@/domain/format'
+import { acceptanceFor, canChallenge, payoutBreakdown } from '@/domain/rules'
 import type { Order, Screen } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { useApp, useOffers } from '@/state/store'
 import { OfferDialog } from './OfferDialog'
+import { PayoutsScreen } from './PayoutsScreen'
 
 const NAV: { id: Screen; label: string; icon: typeof Inbox }[] = [
   { id: 'offers', label: 'New orders', icon: Inbox },
   { id: 'decided', label: 'Accepted', icon: ClipboardCheck },
+  { id: 'payouts', label: 'Payouts', icon: Wallet },
 ]
 
 export function MerchantApp() {
-  const { screen, setScreen, repository, decisions } = useApp()
+  const { screen, setScreen, repository, decisions, deductions, challenges } = useApp()
   const offers = useOffers()
   const [openOrderId, setOpenOrderId] = useState<string | null>(null)
   const openOffer = offers.find((o) => o.id === openOrderId)
-  const counts: Record<Screen, number> = { offers: offers.length, decided: decisions.filter((d) => d.accepted).length }
+  // Deductions the merchant can still act on.
+  const openDeductions =
+    deductions.status === 'ready'
+      ? deductions.value.filter((d) => canChallenge(d, acceptanceFor(d, decisions)?.order) && !challenges.some((c) => c.deductionId === d.id))
+          .length
+      : 0
+  const counts: Record<Screen, number> = {
+    offers: offers.length,
+    decided: decisions.filter((d) => d.accepted).length,
+    payouts: openDeductions,
+  }
 
   return (
     <TabletFrame>
@@ -48,7 +60,7 @@ export function MerchantApp() {
                 <Icon className="size-4" />
                 <span className="flex-1 text-left">{n.label}</span>
                 {counts[n.id] > 0 && (
-                  <Badge variant={n.id === 'offers' ? 'default' : 'secondary'} className="h-5 min-w-5 px-1.5">
+                  <Badge variant={n.id === 'decided' ? 'secondary' : n.id === 'payouts' ? 'destructive' : 'default'} className="h-5 min-w-5 px-1.5">
                     {counts[n.id]}
                   </Badge>
                 )}
@@ -60,6 +72,7 @@ export function MerchantApp() {
         <main className="min-w-0 flex-1 overflow-y-auto p-5">
           {screen === 'offers' && <OffersScreen offers={offers} onOpen={setOpenOrderId} />}
           {screen === 'decided' && <DecidedScreen />}
+          {screen === 'payouts' && <PayoutsScreen />}
         </main>
       </div>
       {openOffer && <OfferDialog order={openOffer} onClose={() => setOpenOrderId(null)} />}
@@ -173,10 +186,15 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
 }
 
 function DecidedScreen() {
-  const { decisions, setScreen } = useApp()
+  const { decisions, deductions, setScreen } = useApp()
+  const deducted = (orderId: string) =>
+    deductions.status === 'ready'
+      ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === orderId).reduce((sum, d) => sum + d.amount, 0)
+      : 0
   const accepted = decisions.filter((d) => d.accepted)
   const currency = decisions[0]?.order.currency
   const expected = accepted.reduce((sum, d) => sum + d.shown.net, 0)
+  const totalDeducted = accepted.reduce((sum, d) => sum + deducted(d.order.id), 0)
 
   if (decisions.length === 0) {
     return (
@@ -205,6 +223,7 @@ function DecidedScreen() {
           <p className="text-2xl font-semibold">{currency ? money(expected, currency) : '—'}</p>
           <p className="text-[11px] text-muted-foreground">
             {accepted.length} accepted · {decisions.length - accepted.length} declined
+            {totalDeducted > 0 && currency && <> · {money(totalDeducted, currency)} deducted since</>}
           </p>
         </CardContent>
       </Card>
@@ -219,6 +238,7 @@ function DecidedScreen() {
             <TableHead>Your answer</TableHead>
             <TableHead className="text-right">Fee</TableHead>
             <TableHead className="text-right">Payout shown</TableHead>
+            <TableHead className="text-right">Deducted</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -233,6 +253,15 @@ function DecidedScreen() {
               </TableCell>
               <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
               <TableCell className="text-right font-mono font-medium">{d.accepted ? money(d.shown.net, d.order.currency) : '—'}</TableCell>
+              <TableCell className="text-right font-mono">
+                {deducted(d.order.id) > 0 ? (
+                  <button className="text-destructive underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
+                    {signedMoney(-deducted(d.order.id), d.order.currency)}
+                  </button>
+                ) : (
+                  '—'
+                )}
+              </TableCell>
             </TableRow>
           ))}
         </TableBody>

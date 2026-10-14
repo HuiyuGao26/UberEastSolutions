@@ -1,69 +1,75 @@
-# Order Care: prototype for Uber Eats NZ
+# Order Care: merchant app prototype for Uber Eats NZ
 
-A clickable front-end prototype for our INFOSYS 704 group (A3). It shows how the four A2-D1 proposals work together on **one order**, from tonight’s peak forecast to a challenged deduction.
+A prototype for our INFOSYS 704 group assignment (A3). It builds **one feature** from Gao’s A2-D1 proposal (Release 1): an Uber Eats merchant sees what an order will pay **before** accepting it.
 
-> Student prototype for a university course. All people, merchants, orders and numbers are fictional or illustrative. Not affiliated with Uber.
->
-> **This is a design draft, not the A3 submission.** A3 must be built and exported from SAP Build Apps (AppGyver). We use this React version to agree on screens, flow and data before rebuilding it there.
+> Student prototype for a university course. Not affiliated with Uber. The sample people, merchants, orders and numbers are fictional, and the 30% fee rate is illustrative.
 
-## The four proposals in the app
+## What it does
 
-| Proposal (A2-D1) | Domain | Where it appears |
+1. **New orders.** Each order offer shows the expected payout.
+2. **Review offer.** Items at menu price, the merchant’s own promotion, the fee basis, the fee, and the expected payout.
+3. **Accept or decline.** Accepted orders are listed with the payout that was shown at the moment of acceptance.
+
+**Reset** in the top bar turns every order back into a new offer. Answers are saved in your browser only.
+
+## How it uses the SAP API
+
+The screens read orders through one wrapper, `OrderRepository` in `src/sap/repository.ts`, which follows the SAP **Sales Order (A2X) OData V4 API** on the SAP Business Accelerator Hub. It has two implementations, switched with **Data source** in the top bar:
+
+| Data source | Implementation | What it reads |
 |---|---|---|
-| Lin: peak-demand forecast for merchants | Strategic | Merchant tablet → Home: “Busy night ahead” forecast, reasons, suggestions, confirm a plan |
-| Gao: net payout before acceptance; same-day challenge route | Financial | Merchant tablet → order offer shows expected payout and fee basis; Payouts shows each deduction on the day it happens, with the reason, deadlines and a “Challenge” button |
-| Manu: live courier data verifies issues; auto voucher | Operational | Customer phone → Get help → “My order is late”: verified from live courier data, voucher offered with no agent. Support console → live order panel (no phone calls) |
-| Janbandhu: one accountable case owner, shared case record | Organisational | Support console → every case has one owner; merchant, courier and specialist give input without taking the case; decision rights; a challenge returns to the same owner |
+| Sample data (default) | `src/sap/mockRepository.ts` | Fictional Uber Eats orders in `src/sap/mock-data.ts`, written in the Sales Order API’s format |
+| SAP sandbox | `src/sap/sapRepository.ts` | The live SAP sandbox. It returns SAP’s own demo orders, not Uber Eats orders |
 
-The **Insights** page in the support console shows the KPIs each proposal is measured by. Turn **Proposal tags** on or off in the top bar to show or hide which proposal each feature comes from.
+Two requests are made:
 
-## The demo flow
+- `GET …/SalesOrder?$expand=_Item,_Partner`: orders, items and customers
+- `GET …/SalesOrderItem(SalesOrder='…',SalesOrderItem='…')/_ItemPricingElement`: prices and discounts of one item
 
-Open the **Demo guide** (top right) and press the green button at each step. The guide switches between the three devices and fast-forwards the order when needed.
+| On screen | Sales Order API field |
+|---|---|
+| Order number | `SalesOrder` |
+| Placed | `CreationDate` + `CreationTime` |
+| Customer | `_Partner` (sold-to): `BusinessPartnerName1`, `CityName` |
+| Item name and quantity | `_Item`: `SalesOrderItemText`, `RequestedQuantity` |
+| Menu price | `_ItemPricingElement` where `ConditionClass` = B (price) |
+| Merchant’s promotion | Menu price − `NetAmount` (discount conditions) |
+| Fee basis | `_Item`: `NetAmount` |
 
-1. Merchant plans for tonight’s peak (Lin)
-2. Merchant accepts an order after seeing the net payout (Gao)
-3. Courier runs late; the customer asks for help (Manu)
-4. System verifies the delay with live courier data and offers a voucher (Manu)
-5. Order arrives with a drink missing; the customer reports it (Janbandhu)
-6. One case owner checks the facts and asks the merchant (Janbandhu, Manu)
-7. Merchant answers inside the same case (Janbandhu)
-8. Owner resolves within their authority (Janbandhu)
-9. Merchant sees the deduction the same day and challenges it (Gao)
-10. The same owner reviews the challenge (Janbandhu, Gao)
-11. Results across all four proposals (all)
+**What the wrapper adds**, because the API only partly fits the solution:
 
-**Reset** in the top bar starts again. Progress is saved in your browser only.
+- **Fee and expected payout.** A sales order has no marketplace fee, so the app works it out in `src/domain/rules.ts`: fee = fee basis × 30%, payout = fee basis − fee.
+- **Accept and decline.** The sandbox only allows GET (writes return HTTP 405), so the merchant’s answer and the payout shown are kept in the browser. With a company’s own S/4HANA system they would be written back to the order.
 
-## Run it locally
+**How the data is read** in the top bar shows the same information inside the app.
+
+## Run it
 
 Needs Node 22 or later.
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm run build    # production build in dist/
-npm run e2e      # with the dev server running: clicks through all 11 steps in headless Chrome, screenshots in e2e/shots/
+npm run build    # one self-contained file: dist/index.html, which also opens by double-clicking it
+npm run e2e      # with the dev server running: walks through both data sources in headless Chrome, screenshots in e2e/shots/
 ```
 
-## Deploy to Cloudflare
+The sample data works without any setup. For the SAP sandbox, copy `.env.example` to `.env.local` and paste your API key from api.sap.com. The key is read at build time, so it ends up inside `dist/index.html`; `.env.local` and `dist/` are not committed.
 
-Either option works; the site is static.
-
-- **Cloudflare Pages** (simplest): Workers & Pages → Create → Pages → Connect to Git → pick this repo. Framework preset: *React (Vite)*. Build command `npm run build`, output directory `dist`.
-- **Cloudflare Workers**: import the repo as a Worker. `wrangler.jsonc` already points at `dist`. Build command `npm run build`, deploy command `npx wrangler deploy`.
+`index.html?source=sap` or `?source=sample` opens the app on that data source.
 
 ## Where things are
 
 | Path | What it holds |
 |---|---|
-| `src/domain/mock.ts` | All demo data: merchant, orders, couriers, cases, forecast, KPI baselines and targets |
-| `src/domain/types.ts` | Data model |
-| `src/state/reducer.ts` | Every action in the demo (accept order, report issue, resolve case, challenge deduction…) |
-| `src/demo/steps.ts` | The 11 guided steps |
-| `src/apps/merchant/` | Merchant tablet |
-| `src/apps/customer/` | Customer phone |
-| `src/apps/support/` | Support console and Insights |
+| `src/sap/repository.ts` | The wrapper’s interface, and where decisions are stored |
+| `src/sap/sapRepository.ts`, `src/sap/client.ts` | Calls to the SAP sandbox |
+| `src/sap/mockRepository.ts`, `src/sap/mock-data.ts` | Sample orders in the Sales Order API’s format |
+| `src/sap/types.ts` | The Sales Order API fields the app reads |
+| `src/domain/mapping.ts` | Sales Order records → what the screens show |
+| `src/domain/rules.ts` | Fee rate and the expected payout |
+| `src/state/store.tsx` | Data source, loading, and the merchant’s answers |
+| `src/apps/merchant/` | Merchant tablet: new orders, the offer, accepted orders |
 | `src/components/ui/` | shadcn/ui components |
 
 Stack: Vite, React, TypeScript, Tailwind CSS v4, shadcn/ui (Radix), lucide icons.
@@ -71,5 +77,8 @@ Stack: Vite, React, TypeScript, Tailwind CSS v4, shadcn/ui (Radix), lucide icons
 ## Notes on the numbers
 
 - The 30% fee rate is illustrative. With a merchant-funded item promotion the fee is calculated on the discounted price, as in the NZ Merchant Service Terms §6.2(b).
-- Deduction deadlines: challenges within 30 days of the order date (Uber’s published rule); “notice the same day” and “decision by day 7” are the rules proposed in Gao’s A2-D1.
-- KPI “before” values are assumptions for the prototype. Lin’s 90% and 80% are the assumed baselines in her A2-D1.
+- Whether the real Uber Eats merchant app already shows a net amount on the offer is not known from public guidance; Gao’s A2-D1 checks this in Stage 0.
+
+## Earlier version
+
+The git tag `four-solution-prototype` is the earlier draft that combined all four team proposals (merchant, customer and support views).

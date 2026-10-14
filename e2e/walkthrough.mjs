@@ -1,95 +1,105 @@
-// Clicks through the whole demo guide in headless Chrome and saves screenshots.
+// Walks through the app in headless Chrome and saves screenshots: first on the
+// sample data, then on the live SAP sandbox (skipped with E2E_SKIP_SAP=1).
 // Usage: npm run dev, then `npm run e2e` (screenshots go to e2e/shots/).
-// Set CHROME_PATH if Chrome is not in the default macOS location; E2E_HEIGHT=760 tests a short window.
+// A second argument tests another address, e.g. the built file:
+//   node e2e/walkthrough.mjs e2e/shots "file://$PWD/dist/index.html"
+// Set CHROME_PATH if Chrome is not in the default macOS location.
 import { mkdirSync } from 'node:fs'
 import puppeteer from 'puppeteer-core'
+
 const OUT = process.argv[2] ?? 'e2e/shots'
 const URL = process.argv[3] ?? 'http://localhost:5173/'
 mkdirSync(OUT, { recursive: true })
+
 const browser = await puppeteer.launch({
   executablePath: process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   headless: 'new',
-  defaultViewport: { width: 1600, height: Number(process.env.E2E_HEIGHT ?? 1000) },
+  defaultViewport: { width: 1440, height: 900 },
 })
 const page = await browser.newPage()
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`) })
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
-await page.goto(URL, { waitUntil: 'networkidle0' })
-await page.evaluate(() => localStorage.clear())
-await page.reload({ waitUntil: 'networkidle0' })
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-async function assertGuideShowsCurrent(text) {
-  await sleep(500) // let the smooth scroll finish
-  const visible = await page.evaluate((t) => {
-    const list = document.querySelector('aside ol')
-    const btn = [...list.querySelectorAll('button')].find((b) => b.textContent.includes(t))
-    if (!btn) return false
-    const l = list.getBoundingClientRect()
-    const b = btn.getBoundingClientRect()
-    return b.top >= l.top && b.bottom <= l.bottom
-  }, text)
-  if (!visible) throw new Error(`Guide button "${text}" is scrolled out of view`)
-}
-async function click(text, sel = 'button, [role=tab], label') {
-  if (text.startsWith('Go to ')) await assertGuideShowsCurrent(text)
-  const handles = await page.$$(sel)
-  for (const h of handles) {
+const text = () => page.evaluate(() => document.body.innerText)
+async function shot(name) { await sleep(300); await page.screenshot({ path: `${OUT}/${name}.png` }) }
+async function click(label) {
+  for (const h of await page.$$('button')) {
     const ok = await h.evaluate((el, t) => {
       const r = el.getBoundingClientRect()
       return el.textContent.trim().includes(t) && r.width > 0 && r.height > 0 && !el.disabled
-    }, text)
+    }, label)
     if (ok) { await h.click(); await sleep(250); return }
   }
-  throw new Error(`No clickable element with text: ${text}`)
+  throw new Error(`No clickable button with text: ${label}`)
 }
-async function shot(name) { await sleep(300); await page.screenshot({ path: `${OUT}/${name}.png` }) }
+async function expectText(expected) {
+  const body = await text()
+  if (!body.includes(expected)) throw new Error(`Expected to see "${expected}"`)
+}
+async function waitForText(expected, timeout = 30_000) {
+  await page.waitForFunction((t) => document.body.innerText.includes(t), { timeout }, expected)
+}
 
-await shot('01-merchant-home')
-await click('Confirm plan')
-await click('Go to Merchant tablet')
-await shot('02-offer')
+// --- Sample data ---------------------------------------------------------------
+await page.goto(`${URL}?source=sample`, { waitUntil: 'networkidle0' })
+await page.evaluate(() => localStorage.clear())
+await page.reload({ waitUntil: 'networkidle0' })
+
+await waitForText('Order 4821')
+await expectText('$39.06') // (57.50 − 1.70 promotion) × 70%
+await shot('01-sample-offers')
+
+await click('Review offer')
+await waitForText('Items at menu price')
+await expectText('$57.50')
+await expectText('−$1.70')
+await expectText('$55.80')
+await expectText('−$16.74')
+await shot('02-sample-offer')
+
 await click('Accept order')
-await click('Go to Customer phone')
-await shot('03-tracking-late')
-await click('Get help with this order')
-await click('Send')
-await shot('04-voucher')
-await click('Accept voucher')
-await click('Go to Customer phone')
-await click('Get help with this order')
-await click('Feijoa soda', 'label')
-await shot('05a-help-missing')
-await click('Send')
-await shot('05-missing-case')
-await click('Go to Support console')
-await shot('06-case')
-await click('Send question')
-await click('Go to Merchant tablet')
-await click('Both sodas were packed and the bag')
-await shot('07-request')
-await click('Send answer')
-await click('Go to Support console')
-await click('Resolve', '[role=tab]')
-await shot('08-resolve')
-await click('Resolve case')
-await click('Go to Merchant tablet')
-await shot('09-deduction')
-await click('Challenge this deduction')
-await click('Send challenge')
-await click('Go to Support console')
-await shot('10-challenge')
-await click('Reverse deduction')
-await click('Go to Support console')
-await shot('11-insights')
-await click('Customer', 'nav button')
-await shot('12-customer-after')
-await click('Merchant', 'nav button')
-await click('Payouts', 'aside button')
-await shot('13-merchant-payouts-after')
-const done = await page.evaluate(() => [...document.querySelectorAll('aside p')].map((p) => p.textContent).find((t) => /steps done/.test(t)))
-console.log('guide:', done)
-console.log('errors:', errors.length ? errors.join('\n') : 'none')
+await shot('03-sample-after-accept')
+await click('Review offer')
+await click('Decline')
+await click('Accepted')
+await expectText('Payout shown')
+await expectText('$39.06')
+await expectText('1 accepted · 1 declined')
+await shot('04-sample-accepted')
+
+await page.reload({ waitUntil: 'networkidle0' })
+await waitForText('Order 4819')
+if ((await text()).includes('Order 4821')) throw new Error('An accepted order came back as an offer after a reload')
+
+await click('How the data is read')
+await waitForText('Where each value comes from')
+await shot('05-sample-how-data-is-read')
+await page.keyboard.press('Escape')
+await sleep(300)
+
+// --- Live SAP sandbox ----------------------------------------------------------
+if (!process.env.E2E_SKIP_SAP) {
+  await click('SAP sandbox')
+  await shot('06-sap-loading')
+  await waitForText('Review offer', 60_000)
+  await shot('07-sap-offers')
+  await click('Review offer')
+  await waitForText('Items at menu price', 60_000)
+  await shot('08-sap-offer')
+  await click('Accept order')
+  await click('Accepted')
+  await expectText('Payout shown')
+  await shot('09-sap-accepted')
+  await click('How the data is read')
+  await waitForText('SAP sandbox (live)')
+  await shot('10-sap-how-data-is-read')
+}
+
 await browser.close()
-if (errors.length || !/11 of 11/.test(done ?? '')) process.exit(1)
+if (errors.length) {
+  console.error('Console problems:\n' + errors.join('\n'))
+  process.exit(1)
+}
+console.log(`Walkthrough passed. Screenshots in ${OUT}/`)

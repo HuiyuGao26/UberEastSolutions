@@ -1,28 +1,40 @@
-import type { Merchant, Minute, Order } from './types'
+import type { Order } from './types'
 
-const nzd = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' })
+const currencyFormats = new Map<string, Intl.NumberFormat>()
 
-export function money(value: number): string {
-  return nzd.format(value)
+/** NZD prints as "$12.50"; other currencies keep their code, e.g. "US$12.50". */
+export function money(value: number, currency: string): string {
+  let format = currencyFormats.get(currency)
+  if (!format) {
+    format = new Intl.NumberFormat('en-NZ', { style: 'currency', currency })
+    currencyFormats.set(currency, format)
+  }
+  return format.format(value)
 }
 
-export function signedMoney(value: number): string {
-  return value < 0 ? `−${nzd.format(-value)}` : nzd.format(value)
+export function signedMoney(value: number, currency: string): string {
+  return value < 0 ? `−${money(-value, currency)}` : money(value, currency)
 }
 
-export function clockTime(minute: Minute): string {
-  const h24 = Math.floor(minute / 60) % 24
-  const m = Math.round(minute % 60)
-  const suffix = h24 >= 12 ? 'pm' : 'am'
-  const h12 = h24 % 12 === 0 ? 12 : h24 % 12
-  return `${h12}:${String(m).padStart(2, '0')} ${suffix}`
+const dayFormat = new Intl.DateTimeFormat('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+const timeFormat = new Intl.DateTimeFormat('en-NZ', { hour: 'numeric', minute: '2-digit' })
+
+function day(value: string | Date): string {
+  return dayFormat.format(new Date(value))
 }
 
-export function duration(minutes: number): string {
-  if (minutes < 60) return `${Math.round(minutes)} min`
-  const h = Math.floor(minutes / 60)
-  const m = Math.round(minutes % 60)
-  return m ? `${h} h ${m} min` : `${h} h`
+function time(value: string | Date): string {
+  return timeFormat.format(new Date(value))
+}
+
+function sameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+/** "today at 6:22 pm", or the date when it is another day. */
+export function dayAndTime(value: string | Date): string {
+  const date = new Date(value)
+  return `${sameDay(date, new Date()) ? 'today' : day(date)} at ${time(date)}`
 }
 
 export function percent(value: number, digits = 0): string {
@@ -33,47 +45,6 @@ export function round2(value: number): number {
   return Math.round(value * 100) / 100
 }
 
-export interface PayoutBreakdown {
-  listTotal: number
-  promo: number
-  feeBasis: number
-  fee: number
-  net: number
-  feeRate: number
-}
-
-/**
- * Expected net payout shown on the order offer (Gao, A2-D1 Release 1).
- * For merchant-funded item promotions the fee is calculated on the
- * discounted price (Merchant Service Terms NZ §6.2(b)(ii)).
- */
-export function payoutBreakdown(order: Order, merchant: Merchant): PayoutBreakdown {
-  let listTotal = 0
-  let promo = 0
-  for (const item of order.items) {
-    const line = item.qty * item.unitPrice
-    listTotal += line
-    promo += line * (item.merchantDiscount ?? 0)
-  }
-  const feeBasis = listTotal - promo
-  const fee = feeBasis * merchant.feeRate
-  return {
-    listTotal: round2(listTotal),
-    promo: round2(promo),
-    feeBasis: round2(feeBasis),
-    fee: round2(fee),
-    net: round2(feeBasis - fee),
-    feeRate: merchant.feeRate,
-  }
-}
-
 export function itemCount(order: Order): number {
-  return order.items.reduce((sum, item) => sum + item.qty, 0)
-}
-
-export function median(values: number[]): number {
-  if (!values.length) return 0
-  const sorted = [...values].sort((a, b) => a - b)
-  const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  return order.lines.reduce((sum, line) => sum + line.qty, 0)
 }

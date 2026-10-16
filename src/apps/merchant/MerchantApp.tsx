@@ -270,18 +270,27 @@ function DecidedScreen() {
         </CardContent>
       </Card>
 
-      <Table>
+      <Table className="min-w-[736px] table-auto text-sm [&_th]:px-2 [&_th]:py-3 [&_th]:whitespace-normal [&_td]:px-2 [&_td]:py-3">
+        <colgroup>
+          <col className="w-[8%]" />
+          <col className="w-[21%]" />
+          <col className="w-[6%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[16%]" />
+          <col className="w-[12%]" />
+          <col className="w-[15%]" />
+        </colgroup>
         <TableHeader>
           <TableRow>
-            <TableHead>Order</TableHead>
-            <TableHead>Responded at</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead className="text-right">Items</TableHead>
-            <TableHead>Decision</TableHead>
+            <TableHead className="text-left">Order</TableHead>
+            <TableHead className="text-left">Responded at</TableHead>
+            <TableHead className="text-center">Items</TableHead>
+            <TableHead className="text-center">Decision</TableHead>
             <TableHead className="text-right">Fee</TableHead>
             <TableHead className="text-right">Payout at acceptance</TableHead>
             <TableHead className="text-right">Deductions</TableHead>
-            <TableHead className="text-right">Challenge status</TableHead>
+            <TableHead className="text-center">Challenge status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -290,7 +299,7 @@ function DecidedScreen() {
             const sentCount = refunds.filter((refund) => challenges.some((c) => c.deductionId === refund.id)).length
             return (
               <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
-                <TableCell className="font-medium">
+                <TableCell className="text-left font-medium">
                   {d.accepted ? (
                     <button
                       className="text-primary underline underline-offset-2 hover:no-underline"
@@ -301,10 +310,9 @@ function DecidedScreen() {
                     </button>
                   ) : d.order.id}
                 </TableCell>
-                <TableCell>{dayAndTime(d.decidedAt)}</TableCell>
-                <TableCell>{d.order.customer}</TableCell>
-                <TableCell className="text-right">{itemCount(d.order)}</TableCell>
-                <TableCell>
+                <TableCell className="text-left whitespace-normal">{dayAndTime(d.decidedAt)}</TableCell>
+                <TableCell className="text-center">{itemCount(d.order)}</TableCell>
+                <TableCell className="text-center">
                   <Badge variant={d.accepted ? 'default' : 'outline'}>{d.accepted ? 'Accepted' : 'Declined'}</Badge>
                 </TableCell>
                 <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
@@ -318,7 +326,7 @@ function DecidedScreen() {
                     '—'
                   )}
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-center">
                   {!d.accepted ? <span className="font-mono">—</span> : deductions.status !== 'ready' ? (
                     deductions.status === 'loading' ? 'Loading…' : 'Unavailable'
                   ) : refunds.length === 0 ? <span className="font-mono">—</span> : (

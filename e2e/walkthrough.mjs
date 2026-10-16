@@ -56,8 +56,8 @@ async function waitForText(expected, timeout = 30_000) {
 
 async function expectAcceptedSummary(amount, deducted) {
   const summary = await page.evaluate(() => [...document.querySelectorAll('[data-slot="card"]')]
-    .find((card) => card.textContent.includes('Expected payout after deductions'))?.innerText)
-  if (!summary?.includes(amount) || !summary.includes(`$39.06 shown at acceptance · ${deducted} deducted`)) {
+    .find((card) => card.textContent.includes('Current expected payout'))?.innerText)
+  if (!summary?.includes(amount) || !summary.includes(`$39.06 at acceptance · ${deducted} in deductions`)) {
     throw new Error(`Unexpected accepted payout summary: ${summary}`)
   }
 }
@@ -116,7 +116,7 @@ await click('New orders')
 // 2. The customer reports a missing item: the merchant is told without being interrupted.
 await click(SIMULATE)
 await waitForText('−$5.00 on order 4821')
-await expectText('Each order shows what it will pay you') // still on New orders
+await expectText('Each order shows your expected payout') // still on New orders
 await expectNav('New orders', { active: true, count: '3' })
 await expectNav('Payouts', { active: false, count: '1' })
 if (await page.$('[role="dialog"]')) throw new Error('The simulation opened a blocking dialog')
@@ -166,7 +166,7 @@ await shot('06-sample-challenge-sent')
 await click('Accepted')
 await expectText('1 accepted · 0 declined')
 await expectText('−$5.00')
-await expectText('Challenge sent')
+await expectText('Submitted')
 await expectAcceptedSummary('$34.06', '$5.00') // Submitting a challenge does not reverse the deduction.
 await shot('07-sample-accepted')
 
@@ -176,7 +176,7 @@ if ((await text()).includes('Order 4821')) throw new Error('An accepted order ca
 await click('Payouts')
 await waitForText('Challenge sent')
 await click('Accepted')
-await expectText('Challenge sent')
+await expectText('Submitted')
 await expectAcceptedSummary('$34.06', '$5.00')
 await expectSavedOrderDetails()
 
@@ -338,7 +338,7 @@ try {
   await page.keyboard.press('Escape')
   await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
   await click('Accepted')
-  await expectText('Challenge sent')
+  await expectText('Submitted')
   await expectAcceptedSummary('$34.06', '$5.00')
   await click('Reset')
   await waitForText('Order 4821')
@@ -364,7 +364,7 @@ if (!process.env.E2E_SKIP_SAP) {
   await click('Accept order')
   if ((await isDisabled(SIMULATE)) !== true) throw new Error('The simulation should stay disabled on the SAP sandbox')
   await click('Accepted')
-  await expectText('Payout shown')
+  await expectText('Payout at acceptance')
   await click('Payouts')
   await waitForText('Challenge window closed', 60_000)
   await expectText('SAP order reason')

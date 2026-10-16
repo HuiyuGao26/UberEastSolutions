@@ -107,7 +107,7 @@ function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: s
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">New orders</h2>
-        <p className="text-sm text-muted-foreground">Each order shows what it will pay you before you accept it.</p>
+        <p className="text-sm text-muted-foreground">Each order shows your expected payout before you accept it.</p>
         {source === 'sap' && (
           <p className="mt-1 text-xs text-muted-foreground">
             Read live from the SAP sandbox. These are SAP’s own demo orders, shown through the same screen as the sample data.
@@ -192,7 +192,7 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
             <p className="text-2xl font-semibold text-primary">{money(b.net, order.currency)}</p>
           </div>
           <p className="text-right text-[11px] leading-tight text-muted-foreground">
-            after the {percent(b.feeRate)} fee
+            After a {percent(b.feeRate)} fee
             <br />
             on {money(b.feeBasis, order.currency)}
           </p>
@@ -248,12 +248,12 @@ function DecidedScreen() {
 
       <Card size="sm" className="max-w-xs">
         <CardContent>
-          <p className="text-xs text-muted-foreground">Expected payout after deductions</p>
+          <p className="text-xs text-muted-foreground">Current expected payout</p>
           {deductions.status === 'ready' ? totals.map((total) => (
             <div key={total.currency}>
               <p className="text-2xl font-semibold">{money(total.expected - total.deducted, total.currency)}</p>
               <p className="text-[11px] text-muted-foreground">
-                {money(total.expected, total.currency)} shown at acceptance · {money(total.deducted, total.currency)} deducted
+                {money(total.expected, total.currency)} at acceptance · {money(total.deducted, total.currency)} in deductions
               </p>
             </div>
           )) : (
@@ -274,13 +274,13 @@ function DecidedScreen() {
         <TableHeader>
           <TableRow>
             <TableHead>Order</TableHead>
-            <TableHead>Answered</TableHead>
+            <TableHead>Responded at</TableHead>
             <TableHead>Customer</TableHead>
             <TableHead className="text-right">Items</TableHead>
-            <TableHead>Your answer</TableHead>
+            <TableHead>Decision</TableHead>
             <TableHead className="text-right">Fee</TableHead>
-            <TableHead className="text-right">Payout shown</TableHead>
-            <TableHead className="text-right">Deducted</TableHead>
+            <TableHead className="text-right">Payout at acceptance</TableHead>
+            <TableHead className="text-right">Deductions</TableHead>
             <TableHead className="text-right">Challenge status</TableHead>
           </TableRow>
         </TableHeader>
@@ -323,7 +323,7 @@ function DecidedScreen() {
                     deductions.status === 'loading' ? 'Loading…' : 'Unavailable'
                   ) : refunds.length === 0 ? <span className="font-mono">—</span> : (
                     <Badge variant={sentCount > 0 ? 'secondary' : 'outline'}>
-                      {sentCount === 0 ? 'Not submitted' : sentCount === refunds.length ? 'Challenge sent' : `${sentCount}/${refunds.length} sent`}
+                      {sentCount === 0 ? 'Not submitted' : sentCount === refunds.length ? 'Submitted' : `${sentCount}/${refunds.length} sent`}
                     </Badge>
                   )}
                 </TableCell>

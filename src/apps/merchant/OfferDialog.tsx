@@ -154,7 +154,7 @@ function OrderDetailsDialog({ order, breakdown: b, pricing, onClose, readOnly = 
         </div>
 
         <div className="space-y-1 rounded-xl bg-muted/70 p-4 text-sm">
-          <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">What you’ll get</p>
+          <p className="mb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">EXPECTED PAYOUT BREAKDOWN</p>
           {pricing === 'ready' && (
             <>
               <Row label="Items at menu price" value={money(b.listTotal, cur)} />
@@ -175,7 +175,7 @@ function OrderDetailsDialog({ order, breakdown: b, pricing, onClose, readOnly = 
       <p className="flex gap-1.5 px-5 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          {readOnly ? 'Saved when you accepted this order.' : 'Shown before you accept.'} The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
+          {readOnly ? 'This estimate was saved when you accepted the order.' : 'This estimate is shown before you accept the order.'} The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
           {pricing === 'unavailable' && (readOnly
             ? ' The saved record does not confirm the split into menu price and promotion; the payout shown at acceptance is preserved.'
             : ' The split into menu price and promotion could not be read; the payout is unaffected.')}

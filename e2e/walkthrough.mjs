@@ -136,6 +136,14 @@ await expectText('$39.06 → $34.06') // the payout shown at acceptance, less th
 await expectText('$16.74') // the fee is kept in full
 await expectText('Challenge by:')
 await expectText('Outcome due by:')
+await expectText('Customer photo')
+await page.click('[aria-label="View customer sample photo"]')
+await page.waitForFunction(() => {
+  const img = document.querySelector('img[alt="Sample customer photo showing one Feijoa soda bottle enlarged"]')
+  return img?.complete && img.naturalWidth > 0
+})
+await page.keyboard.press('Escape')
+await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
 if ((await text()).includes('−$5.00 on order 4821')) throw new Error('The notice should close when Payouts is opened')
 await shot('04-sample-deduction')
 
@@ -199,6 +207,8 @@ await expectNav('Payouts', { active: false, count: '1' })
 if ((await isDisabled(SIMULATE)) !== true) throw new Error('The simulation fell back to an older accepted order')
 await click('See why and respond')
 await expectText('Customer reported a missing item: 1 × Kūmara fries')
+if ((await text()).includes('No customer photo available')) throw new Error('A missing photo should not display placeholder text')
+if (await page.$('[aria-label="View customer sample photo"]')) throw new Error('Order 4820 incorrectly shows the 4821 customer illustration')
 await expectText('$35.42 → $28.62')
 await expectText('$15.18')
 
@@ -358,6 +368,8 @@ if (!process.env.E2E_SKIP_SAP) {
   await click('Payouts')
   await waitForText('Challenge window closed', 60_000)
   await expectText('SAP order reason')
+  if ((await text()).includes('No customer photo available')) throw new Error('SAP deductions should not display missing-photo placeholder text')
+  if (await page.$('[aria-label="View customer sample photo"]')) throw new Error('SAP deductions incorrectly show a sample customer photo')
   await shot('12-sap-deductions')
   await click('How the data is read')
   await waitForText('SAP sandbox (live)')

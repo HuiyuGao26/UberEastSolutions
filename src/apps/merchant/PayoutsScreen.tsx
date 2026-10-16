@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ClipboardList, RefreshCw, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
+import sampleCustomerPhoto from '@/assets/only-one-drink.png?inline'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -78,7 +79,8 @@ export function PayoutsScreen() {
 }
 
 function DeductionCard({ deduction: d }: { deduction: Deduction }) {
-  const { decisions, challenges, challenge } = useApp()
+  const { source, decisions, challenges, challenge } = useApp()
+  const hasCustomerPhoto = source === 'sample' && d.reference.kind === 'order' && d.reference.id === '4821'
   // The payout can only be shown for an order the merchant accepted in this app.
   const decision = acceptanceFor(d, decisions)
   const sent = challenges.find((c) => c.deductionId === d.id)
@@ -116,6 +118,13 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
           <span className="font-medium">{d.reason}</span>
           {d.lines.length > 0 && <>: {d.lines.map((line) => `${line.qty} × ${line.name}`).join(', ')}</>}
         </p>
+
+        {hasCustomerPhoto && (
+          <div className="space-y-2">
+            <p className="text-xs font-medium">Customer photo</p>
+            <PhotoPreview photo={{ name: 'only-one-drink.png', dataUrl: sampleCustomerPhoto }} customer />
+          </div>
+        )}
 
         <div className="rounded-md bg-muted/60 p-3">
           <div className="flex justify-between gap-3">
@@ -254,19 +263,21 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
   )
 }
 
-function PhotoPreview({ photo }: { photo: ChallengePhoto }) {
+function PhotoPreview({ photo, customer = false }: { photo: ChallengePhoto; customer?: boolean }) {
+  const title = customer ? 'Customer photo' : 'Attached photo'
+  const alt = customer ? 'Sample customer photo showing one Feijoa soda bottle' : 'Merchant evidence photo'
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button className="block max-w-full rounded-md border p-1 text-left focus-visible:ring-2 focus-visible:ring-ring" aria-label="View attached photo">
-          <img src={photo.dataUrl} alt="Merchant evidence photo" className="h-24 w-32 rounded object-contain" />
+        <button className="block max-w-full rounded-md border p-1 text-left focus-visible:ring-2 focus-visible:ring-ring" aria-label={customer ? 'View customer sample photo' : 'View attached photo'}>
+          <img src={photo.dataUrl} alt={alt} className="h-24 w-32 rounded object-contain" />
           <span className="block max-w-48 truncate px-1 text-xs">{photo.name}</span>
         </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-2xl">
-        <DialogTitle>Attached photo</DialogTitle>
+        <DialogTitle>{title}</DialogTitle>
         <DialogDescription className="break-all">{photo.name}</DialogDescription>
-        <img src={photo.dataUrl} alt="Merchant evidence photo enlarged" className="max-h-[65vh] w-full object-contain" />
+        <img src={photo.dataUrl} alt={`${alt} enlarged`} className="max-h-[65vh] w-full object-contain" />
       </DialogContent>
     </Dialog>
   )

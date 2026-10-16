@@ -17,6 +17,8 @@ A prototype for our INFOSYS 704 group assignment (A3). It builds Gao’s A2-D1 p
 - **Payouts.** A customer refund taken from the payout shows its reason, the items, the fee that is kept in full, and the payout before and after.
 - **Challenge this deduction.** The merchant writes why it should be reversed and sends it. The card then shows the challenge and the date an outcome is due (day 7). A deduction can be challenged within 30 days of the order date.
 
+The merchant can optionally attach one JPEG or PNG photo (up to 5 MB), preview or remove it before sending, and open the saved photo afterward. Photos are resized and kept only in this browser alongside the challenge, not sent to SAP or a reviewer. If saving fails, the form keeps the explanation and photo for retrying. Unsent drafts are not retained after leaving Payouts or reloading. Reset clears submitted challenges and their photos.
+
 The sample day starts with four new orders and no deductions. After accepting an order, use **Simulate: customer reports a missing item** in the top bar outside the tablet. This plays the customer reporting a problem after delivery: one unit of the cheapest item on the most recently accepted order is refunded, at its price after any promotion. The tablet shows a notification and a Payouts badge without navigating away or opening a dialog. Open **Payouts** to see why and send a challenge.
 
 For example: accept order **4821** with an expected payout of **$39.06** → simulate the missing item → see a **$5.00** deduction for one Feijoa soda → open Payouts and see **$39.06 → $34.06**, with the **$16.74** fee kept in full → send a challenge.

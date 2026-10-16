@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toDeduction, toOrder } from '@/domain/mapping'
-import type { Challenge, Decision, Deduction, Order, PayoutBreakdown, Screen, Source } from '@/domain/types'
+import type { Challenge, ChallengePhoto, Decision, Deduction, Order, PayoutBreakdown, Screen, Source } from '@/domain/types'
 import { mockRepository, simulateMissingItemRefund } from '@/sap/mockRepository'
 import type { OrderRepository } from '@/sap/repository'
 import { sapRepository } from '@/sap/sapRepository'
@@ -23,7 +23,7 @@ interface AppStore {
   decisions: Decision[]
   decide: (order: Order, accepted: boolean, shown: PayoutBreakdown, pricingAvailable?: boolean) => void
   challenges: Challenge[]
-  challenge: (deductionId: string, text: string) => void
+  challenge: (deductionId: string, text: string, photo?: ChallengePhoto) => void
   /**
    * The most recently accepted order, unless a report was already simulated
    * for it. Only the sample data supports the simulation.
@@ -144,8 +144,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         refreshRecords()
       },
       challenges: records[source].challenges,
-      challenge: (deductionId, text) => {
-        repository.saveChallenge({ deductionId, text, sentAt: new Date().toISOString() })
+      challenge: (deductionId, text, photo) => {
+        repository.saveChallenge({ deductionId, text, sentAt: new Date().toISOString(), photo })
         refreshRecords()
       },
       simulationTarget,

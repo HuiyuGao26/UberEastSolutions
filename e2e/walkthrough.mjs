@@ -4,7 +4,9 @@
 // A second argument tests another address, e.g. the built file:
 //   node e2e/walkthrough.mjs e2e/shots "file://$PWD/dist/index.html"
 // Set CHROME_PATH if Chrome is not in the default macOS location.
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
 
 const OUT = process.argv[2] ?? 'e2e/shots'
@@ -234,6 +236,110 @@ await click('Accepted')
 await expectText('You have not answered any order yet.')
 await click('Payouts')
 await expectText('No deductions. Nothing has been taken from your payouts.')
+
+// --- Optional merchant photo ---------------------------------------------------
+const photoFixtures = mkdtempSync(join(tmpdir(), 'order-care-photos-'))
+try {
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 1800
+    canvas.height = 1000
+    const context = canvas.getContext('2d')
+    context.fillStyle = '#228855'
+    context.fillRect(0, 0, canvas.width, canvas.height)
+    return canvas.toDataURL('image/png').split(',')[1]
+  })
+  const packing = join(photoFixtures, 'packing.png')
+  const replacement = join(photoFixtures, 'sealed-bag.png')
+  const invalid = join(photoFixtures, 'notes.txt')
+  const corrupt = join(photoFixtures, 'corrupt.jpg')
+  const oversized = join(photoFixtures, 'large.jpg')
+  writeFileSync(packing, Buffer.from(png, 'base64'))
+  writeFileSync(replacement, Buffer.from(png, 'base64'))
+  writeFileSync(invalid, 'not a photo')
+  writeFileSync(corrupt, 'not a JPEG')
+  writeFileSync(oversized, Buffer.alloc(5 * 1024 * 1024 + 1))
+
+  await click('New orders')
+  await click('Review offer')
+  await waitForText('Items at menu price')
+  await click('Accept order')
+  await click(SIMULATE)
+  await click('Payouts')
+  await click('Challenge this deduction')
+  await page.type('textarea', 'Both drinks are visible in our packing photo.')
+  const input = await page.$('input[type="file"]')
+  if (await input.evaluate((el) => el.multiple)) throw new Error('The attachment input allows multiple photos')
+  for (const [file, message] of [[invalid, 'Choose a JPEG or PNG photo.'], [oversized, 'no larger than 5 MB'], [corrupt, 'could not be opened']]) {
+    await input.uploadFile(file)
+    await waitForText(message)
+    if ((await page.$eval('textarea', (el) => el.value)) !== 'Both drinks are visible in our packing photo.') {
+      throw new Error('A rejected photo cleared the explanation')
+    }
+  }
+  await input.uploadFile(packing)
+  await waitForText('packing.png')
+  await page.waitForFunction(() => {
+    const img = document.querySelector('img[alt="Merchant evidence photo"]')
+    return img?.complete && img.naturalWidth > 0 && img.naturalWidth <= 1280
+  })
+  await click('Remove photo')
+  if (await page.$('img[alt="Merchant evidence photo"]')) throw new Error('Removing the draft photo failed')
+  await input.uploadFile(packing) // Reselecting the same file must work.
+  await waitForText('packing.png')
+  await input.uploadFile(replacement)
+  await waitForText('sealed-bag.png')
+  if ((await page.$$('img[alt="Merchant evidence photo"]')).length !== 1) throw new Error('Replacing a photo added a second attachment')
+  await page.click('[aria-label="View attached photo"]')
+  await page.waitForSelector('img[alt="Merchant evidence photo enlarged"]')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
+
+  // Failed persistence must leave the form and evidence available for retry.
+  await page.evaluate(() => {
+    window.originalStorageSetItem = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'order-care:challenges:sample') throw new DOMException('Full', 'QuotaExceededError')
+      return window.originalStorageSetItem.call(this, key, value)
+    }
+  })
+  await click('Send challenge')
+  await expectText('Your challenge could not be saved')
+  await expectText('sealed-bag.png')
+  await expectNav('Payouts', { active: true, count: '1' })
+  if (!(await page.$('textarea'))) throw new Error('A failed submission closed the form')
+  await page.evaluate(() => { Storage.prototype.setItem = window.originalStorageSetItem })
+  await click('Send challenge')
+  await expectNav('Payouts', { active: true, count: '' })
+  await expectText('Challenge sent')
+  await expectText('sealed-bag.png')
+  if (await page.$('textarea')) throw new Error('Successful submission left the draft form open')
+  await shot('09a-merchant-photo-sent')
+
+  await page.reload({ waitUntil: 'networkidle0' })
+  await waitForText('Order 4820')
+  await click('Payouts')
+  await expectText('sealed-bag.png')
+  await page.click('[aria-label="View attached photo"]')
+  await page.waitForFunction(() => {
+    const img = document.querySelector('img[alt="Merchant evidence photo enlarged"]')
+    return img?.complete && img.naturalWidth > 0
+  })
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
+  await click('Accepted')
+  await expectText('Challenge sent')
+  await expectAcceptedSummary('$34.06', '$5.00')
+  await click('Reset')
+  await waitForText('Order 4821')
+  await click('Payouts')
+  await expectText('No deductions. Nothing has been taken from your payouts.')
+  if (await page.evaluate(() => localStorage.getItem('order-care:challenges:sample') !== '[]')) {
+    throw new Error('Reset kept submitted photo evidence')
+  }
+} finally {
+  rmSync(photoFixtures, { recursive: true, force: true })
+}
 
 // --- Live SAP sandbox ----------------------------------------------------------
 if (!process.env.E2E_SKIP_SAP) {

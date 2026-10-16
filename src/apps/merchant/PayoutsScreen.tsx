@@ -1,16 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ClipboardList, RefreshCw, TriangleAlert } from 'lucide-react'
 import { toast } from 'sonner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { day, dayAndTime, money, signedMoney } from '@/domain/format'
 import { CHALLENGE_WINDOW_DAYS, OUTCOME_DUE_DAYS, acceptanceFor, canChallenge, challengeDeadline, outcomeDue } from '@/domain/rules'
-import type { Deduction } from '@/domain/types'
+import { prepareChallengePhoto } from '@/domain/challengePhoto'
+import type { ChallengePhoto, Deduction } from '@/domain/types'
 import { useApp } from '@/state/store'
 
 /**
@@ -66,7 +69,7 @@ export function PayoutsScreen() {
       {deductions.status === 'ready' && (
         <div className="space-y-3">
           {deductions.value.map((d) => (
-            <DeductionCard key={d.id} deduction={d} />
+            <DeductionCard key={`${source}:${d.id}`} deduction={d} />
           ))}
         </div>
       )}
@@ -82,6 +85,12 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
   const open = canChallenge(d, decision?.order)
   const [writing, setWriting] = useState(false)
   const [text, setText] = useState('')
+  const [photo, setPhoto] = useState<ChallengePhoto>()
+  const [readingPhoto, setReadingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const [submitError, setSubmitError] = useState('')
+  const photoRequest = useRef(0)
+  useEffect(() => () => { photoRequest.current += 1 }, [])
   const cur = d.currency
 
   return (
@@ -144,9 +153,10 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         )}
 
         {sent && (
-          <p className="rounded-md border-l-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs">
-            <b>Your challenge, sent {dayAndTime(sent.sentAt)}:</b> {sent.text}
-          </p>
+          <div className="space-y-2 rounded-md border-l-2 border-amber-400 bg-amber-50 px-3 py-2 text-xs">
+            <p><b>Your challenge, sent {dayAndTime(sent.sentAt)}:</b> {sent.text}</p>
+            {sent.photo && <PhotoPreview photo={sent.photo} />}
+          </div>
         )}
 
         {open && !sent && writing && (
@@ -160,6 +170,52 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
               autoFocus
               placeholder="For example: both sodas were packed; our packing photo shows them in the sealed bag."
             />
+            <Label htmlFor={`photo-${d.id}`}>Attach photo (optional)</Label>
+            <p id={`photo-help-${d.id}`} className="text-xs text-muted-foreground">
+              One JPEG or PNG, up to 5 MB. Photos are resized and saved only in this browser for this demo; they are not sent to SAP.
+            </p>
+            <Input
+              id={`photo-${d.id}`}
+              type="file"
+              accept="image/jpeg,image/png"
+              disabled={readingPhoto}
+              aria-describedby={`photo-help-${d.id}${photoError ? ` photo-error-${d.id}` : ''}`}
+              aria-invalid={!!photoError}
+              onChange={async (event) => {
+                const file = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
+                if (!file) return
+                const request = ++photoRequest.current
+                setReadingPhoto(true)
+                setPhotoError('')
+                setSubmitError('')
+                try {
+                  const prepared = await prepareChallengePhoto(file)
+                  if (request === photoRequest.current) setPhoto(prepared)
+                } catch (error) {
+                  if (request === photoRequest.current) {
+                    setPhotoError(error instanceof Error ? error.message : 'This photo could not be opened.')
+                  }
+                } finally {
+                  if (request === photoRequest.current) setReadingPhoto(false)
+                }
+              }}
+            />
+            {readingPhoto && <p role="status" className="text-xs text-muted-foreground">Preparing photo…</p>}
+            {photoError && <p id={`photo-error-${d.id}`} role="alert" className="text-xs text-destructive">{photoError}</p>}
+            {photo ? (
+              <div className="space-y-2">
+                <PhotoPreview photo={photo} />
+                <Button variant="outline" size="sm" onClick={() => {
+                  photoRequest.current += 1
+                  setReadingPhoto(false)
+                  setPhoto(undefined)
+                  setPhotoError('')
+                  setSubmitError('')
+                }}>Remove photo</Button>
+              </div>
+            ) : <p className="text-xs text-muted-foreground">No photo attached.</p>}
+            {submitError && <p role="alert" className="text-xs text-destructive">{submitError}</p>}
           </div>
         )}
       </CardContent>
@@ -168,14 +224,20 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         <CardFooter className="justify-end gap-2">
           {writing ? (
             <>
-              <Button variant="ghost" onClick={() => setWriting(false)}>
+              <Button variant="ghost" disabled={readingPhoto} onClick={() => setWriting(false)}>
                 Cancel
               </Button>
               <Button
-                disabled={!text.trim()}
+                disabled={!text.trim() || readingPhoto}
                 onClick={() => {
-                  challenge(d.id, text.trim())
-                  toast.success(`Challenge sent. Outcome due by ${day(outcomeDue(d))}.`)
+                  try {
+                    challenge(d.id, text.trim(), photo)
+                    setPhoto(undefined)
+                    setSubmitError('')
+                    toast.success(`Challenge sent. Outcome due by ${day(outcomeDue(d))}.`)
+                  } catch (error) {
+                    setSubmitError(error instanceof Error ? error.message : 'Your challenge could not be saved. Please try again.')
+                  }
                 }}
               >
                 Send challenge
@@ -189,5 +251,23 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         </CardFooter>
       )}
     </Card>
+  )
+}
+
+function PhotoPreview({ photo }: { photo: ChallengePhoto }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="block max-w-full rounded-md border p-1 text-left focus-visible:ring-2 focus-visible:ring-ring" aria-label="View attached photo">
+          <img src={photo.dataUrl} alt="Merchant evidence photo" className="h-24 w-32 rounded object-contain" />
+          <span className="block max-w-48 truncate px-1 text-xs">{photo.name}</span>
+        </button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogTitle>Attached photo</DialogTitle>
+        <DialogDescription className="break-all">{photo.name}</DialogDescription>
+        <img src={photo.dataUrl} alt="Merchant evidence photo enlarged" className="max-h-[65vh] w-full object-contain" />
+      </DialogContent>
+    </Dialog>
   )
 }

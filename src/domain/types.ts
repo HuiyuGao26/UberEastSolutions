@@ -52,11 +52,19 @@ export interface Deduction {
   lines: { name: string; qty: number; amount: number }[]
 }
 
+/** One optional merchant photo attached to a challenge. */
+export interface ChallengePhoto {
+  name: string
+  /** A resized image kept in this browser, not an SAP attachment. */
+  dataUrl: string
+}
+
 /** The merchant's challenge to a deduction. */
 export interface Challenge {
   deductionId: string
   text: string
   sentAt: string
+  photo?: ChallengePhoto
 }
 
 export type Screen = 'offers' | 'decided' | 'payouts'

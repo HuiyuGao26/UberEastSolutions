@@ -33,9 +33,9 @@ type LocalRecords = Pick<OrderRepository, 'listDecisions' | 'saveDecision' | 'li
 
 /**
  * What the merchant does is kept in the browser for both repositories. The
- * sandbox only allows GET (writes return HTTP 405), and neither API has a
+ * prototype only sends GET requests, and neither API has a
  * field for "amount shown at acceptance" or for a challenge. Against a
- * company's own S/4HANA system these would be written back instead.
+ * company's own S/4HANA system, write-back would need suitable APIs and a backend.
  */
 export function localRecords(source: Source): LocalRecords {
   const key = (name: string) => `order-care:${name}:${source}`

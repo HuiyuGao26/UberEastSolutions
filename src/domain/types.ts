@@ -13,6 +13,8 @@ export interface OrderLine {
 
 export interface Order {
   id: string
+  /** Origin of the order values. All merchant actions are still local. */
+  origin?: { kind: 'sap'; importedAt: string } | { kind: 'sample' }
   /** ISO date and time the order was placed. */
   placedAt: string
   customer: string

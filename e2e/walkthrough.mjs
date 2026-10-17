@@ -17,6 +17,11 @@ const browser = await puppeteer.launch({
   defaultViewport: { width: 1440, height: 900 },
 })
 const page = await browser.newPage()
+// This walkthrough isolates the original food workflow from automatic SAP imports.
+await page.evaluateOnNewDocument(() => {
+  const key = 'order-care:imported-sap-orders:v1'
+  if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ importedAt: new Date().toISOString(), orders: [], pricing: [] }))
+})
 const errors = []
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`) })
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
@@ -87,7 +92,7 @@ await expectText('About order 4821')
 await click(SIMULATE)
 await waitForText('−$5.00 on order 4821')
 await expectText('Each order shows what it will pay you') // still on New orders
-await expectNav('New orders', { active: true, count: '3' })
+await expectNav('New orders', { active: true, count: '2' })
 await expectNav('Payouts', { active: false, count: '1' })
 if (await page.$('[role="dialog"]')) throw new Error('The simulation opened a blocking dialog')
 await shot('03-sample-notice')
@@ -180,7 +185,7 @@ await click('Send challenge')
 
 // Refunds, decisions and challenges survive a reload; Reset clears all three.
 await page.reload({ waitUntil: 'networkidle0' })
-await waitForText('Order 4818')
+await waitForText('No new orders. You have answered every offer')
 await expectNav('Payouts', { active: false, count: '1' })
 await click('Payouts')
 await expectText(draft)

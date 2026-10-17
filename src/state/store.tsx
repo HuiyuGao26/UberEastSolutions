@@ -4,6 +4,7 @@ import type { Challenge, Decision, Deduction, Order, PayoutBreakdown, Screen, So
 import { mockRepository, simulateMissingItemRefund } from '@/sap/mockRepository'
 import type { OrderRepository } from '@/sap/repository'
 import { sapRepository } from '@/sap/sapRepository'
+import { importedSapOrders } from '@/sap/importedOrders'
 
 const REPOSITORIES: Record<Source, OrderRepository> = { sample: mockRepository, sap: sapRepository }
 const SOURCE_KEY = 'order-care:source'
@@ -62,9 +63,11 @@ function load<T>(key: string, read: (signal: AbortSignal) => Promise<T>, store: 
   return () => controller.abort()
 }
 
-/** A result from another source or an earlier attempt means this read is still loading. */
+/** Keep same-source records visible during refresh, including an open offer or challenge draft. */
 function current<T>(loaded: Keyed<T>, key: string): Loaded<T> {
-  return loaded?.key === key ? loaded.result : { status: 'loading' }
+  if (loaded?.key === key) return loaded.result
+  if (loaded?.key.split(':')[0] === key.split(':')[0] && loaded?.result.status === 'ready') return loaded.result
+  return { status: 'loading' }
 }
 
 function localRecordsOf(repository: OrderRepository) {
@@ -90,10 +93,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
       load(
         loadKey,
         // An order without items has nothing to pay out.
-        async (signal) => (await repository.listSalesOrders(signal)).filter((so) => so._Item.length > 0).map(toOrder),
+        async (signal) => {
+          const raw = await repository.listSalesOrders(signal)
+          const snapshot = source === 'sample' ? importedSapOrders() : null
+          const importedIds = new Set(snapshot?.orders.map((order) => order.SalesOrder))
+          return raw.filter((so) => so._Item.length > 0).map((so) => ({
+            ...toOrder(so),
+            origin: source === 'sap' || importedIds.has(so.SalesOrder)
+              ? { kind: 'sap' as const, importedAt: snapshot?.importedAt ?? new Date().toISOString() }
+              : { kind: 'sample' as const },
+          }))
+        },
         setOrders,
       ),
-    [repository, loadKey],
+    [repository, loadKey, source],
   )
 
   useEffect(

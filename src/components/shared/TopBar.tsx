@@ -1,9 +1,12 @@
-import { Database, FlaskConical, MessageSquareWarning, RotateCcw } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Database, Download, FlaskConical, MessageSquareWarning, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import type { Source } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/store'
+import { importedSapOrders, importSapOrders } from '@/sap/importedOrders'
+import { hasSapApiKey } from '@/sap/client'
 import { DataSheet } from './DataSheet'
 
 const SOURCES: { id: Source; label: string; icon: typeof Database }[] = [
@@ -12,7 +15,31 @@ const SOURCES: { id: Source; label: string; icon: typeof Database }[] = [
 ]
 
 export function TopBar() {
-  const { source, setSource, reset, decisions, simulationTarget, simulateMissingItem } = useApp()
+  const { source, setSource, reset, reload, decisions, simulationTarget, simulateMissingItem } = useApp()
+  const [importing, setImporting] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const autoImportStarted = useRef(false)
+  const readSapOrders = useCallback(async () => {
+    setImporting(true)
+    setImportError(null)
+    try {
+      const snapshot = await importSapOrders(AbortSignal.timeout(30_000))
+      reload()
+      toast.success(`Imported ${snapshot.orders.length} SAP orders. All actions stay in this browser.`)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setImporting(false)
+    }
+  }, [reload])
+
+  // First visit: three food offers appear immediately, then original SAP
+  // orders fill the fourth and later positions. Later visits use the snapshot.
+  useEffect(() => {
+    if (source !== 'sample' || !hasSapApiKey || importedSapOrders() || autoImportStarted.current) return
+    autoImportStarted.current = true
+    void readSapOrders()
+  }, [source, readSapOrders])
   // Which order the simulation is about, or why it cannot run right now.
   const simulationHint = simulationTarget
     ? `About order ${simulationTarget.order.id}`
@@ -56,6 +83,21 @@ export function TopBar() {
           })}
         </nav>
       </div>
+
+      {source === 'sample' && (
+        <div className="flex max-w-72 flex-col gap-0.5">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={importing}
+            onClick={readSapOrders}
+          >
+            <Download /> {importing ? 'Reading SAP orders…' : 'Import SAP orders'}
+          </Button>
+          <span className="text-[11px] text-muted-foreground">Original SAP data · all actions simulated locally</span>
+          {importError && <p role="alert" className="text-xs text-destructive">{importError}</p>}
+        </div>
+      )}
 
       <div className="flex flex-col items-start gap-0.5">
         <Button variant="outline" size="sm" disabled={!simulationTarget} onClick={simulateMissingItem}>

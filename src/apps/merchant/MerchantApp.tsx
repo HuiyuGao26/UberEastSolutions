@@ -113,6 +113,11 @@ function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: s
             Read live from the SAP sandbox. These are SAP’s own demo orders, shown through the same screen as the sample data.
           </p>
         )}
+        {source === 'sample' && orders.status === 'ready' && orders.value.some((order) => order.origin?.kind === 'sap') && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            Food orders are fictional. Cards marked SAP demo record keep the imported data unchanged. All actions are simulated locally.
+          </p>
+        )}
       </div>
 
       {orders.status === 'loading' && (
@@ -172,7 +177,10 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle>Order {order.id}</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          Order {order.id}
+          {order.origin?.kind === 'sap' && <Badge variant="outline">SAP demo record</Badge>}
+        </CardTitle>
         <CardDescription>
           {order.customer} · placed {dayAndTime(order.placedAt)}
         </CardDescription>
@@ -212,9 +220,16 @@ function DecidedScreen() {
       ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === orderId).reduce((sum, d) => sum + d.amount, 0)
       : 0
   const accepted = decisions.filter((d) => d.accepted)
-  const currency = decisions[0]?.order.currency
-  const expected = accepted.reduce((sum, d) => sum + d.shown.net, 0)
-  const totalDeducted = accepted.reduce((sum, d) => sum + deducted(d.order.id), 0)
+  // Imported SAP orders can use USD while the food examples use NZD.
+  // Keep each currency's total separate; the app does not convert currencies.
+  const totals = new Map<string, { expected: number; deducted: number }>()
+  for (const decision of accepted) {
+    const currency = decision.order.currency
+    const total = totals.get(currency) ?? { expected: 0, deducted: 0 }
+    total.expected += decision.shown.net
+    total.deducted += deducted(decision.order.id)
+    totals.set(currency, total)
+  }
 
   if (decisions.length === 0) {
     return (
@@ -240,10 +255,15 @@ function DecidedScreen() {
       <Card size="sm" className="max-w-xs">
         <CardContent>
           <p className="text-xs text-muted-foreground">Expected payout from accepted orders</p>
-          <p className="text-2xl font-semibold">{currency ? money(expected, currency) : '—'}</p>
+          {totals.size === 0 && <p className="text-2xl font-semibold">—</p>}
+          {[...totals].map(([currency, total]) => (
+            <div key={currency}>
+              <p className="text-2xl font-semibold">{money(total.expected, currency)}</p>
+              {total.deducted > 0 && <p className="text-[11px] text-muted-foreground">{money(total.deducted, currency)} deducted since</p>}
+            </div>
+          ))}
           <p className="text-[11px] text-muted-foreground">
             {accepted.length} accepted · {decisions.length - accepted.length} declined
-            {totalDeducted > 0 && currency && <> · {money(totalDeducted, currency)} deducted since</>}
           </p>
         </CardContent>
       </Card>
@@ -264,7 +284,10 @@ function DecidedScreen() {
         <TableBody>
           {decisions.map((d) => (
             <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
-              <TableCell className="font-medium">{d.order.id}</TableCell>
+              <TableCell className="font-medium">
+                {d.order.id}
+                {d.order.origin?.kind === 'sap' && <span className="block text-[10px] font-normal text-muted-foreground">SAP demo record</span>}
+              </TableCell>
               <TableCell>{dayAndTime(d.decidedAt)}</TableCell>
               <TableCell>{d.order.customer}</TableCell>
               <TableCell className="text-right">{itemCount(d.order)}</TableCell>

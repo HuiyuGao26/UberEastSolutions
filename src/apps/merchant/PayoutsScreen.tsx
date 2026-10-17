@@ -75,7 +75,7 @@ export function PayoutsScreen() {
 }
 
 function DeductionCard({ deduction: d }: { deduction: Deduction }) {
-  const { decisions, challenges, challenge } = useApp()
+  const { source, decisions, challenges, challenge } = useApp()
   // The payout can only be shown for an order the merchant accepted in this app.
   const decision = acceptanceFor(d, decisions)
   const sent = challenges.find((c) => c.deductionId === d.id)
@@ -99,6 +99,7 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         </CardTitle>
         <CardDescription>
           Deducted {dayAndTime(d.createdAt)} · refund {d.id}
+          {source === 'sample' && ' · Local simulation, not a SAP credit memo'}
         </CardDescription>
       </CardHeader>
 

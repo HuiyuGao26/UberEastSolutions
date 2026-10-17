@@ -12,6 +12,7 @@ export const SERVICES = {
 
 /** Set in .env.local (see .env.example). */
 const API_KEY: string = import.meta.env.VITE_SAP_API_KEY ?? ''
+export const hasSapApiKey = Boolean(API_KEY)
 
 export function odataUrl(service: string, path: string, params: Record<string, string | number> = {}): string {
   const query = Object.entries(params)

@@ -1,8 +1,10 @@
 import { Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
-import { percent } from '@/domain/format'
+import { dayAndTime, percent } from '@/domain/format'
 import { FEE_RATE } from '@/domain/rules'
+import { importedSapOrders } from '@/sap/importedOrders'
+import { sapRepository } from '@/sap/sapRepository'
 import { useApp } from '@/state/store'
 
 /** Where each value on the merchant screens comes from in the two SAP APIs. */
@@ -34,6 +36,7 @@ const FIELD_MAP: { api: string; fields: [onScreen: string, sapField: string][] }
 /** Explains the SAP API wrapper: what is read, from where, and what the app adds. */
 export function DataSheet() {
   const { source, repository, orders, deductions } = useApp()
+  const imported = source === 'sample' ? importedSapOrders() : null
 
   return (
     <Sheet>
@@ -47,7 +50,8 @@ export function DataSheet() {
           <SheetTitle>How the data is read</SheetTitle>
           <SheetDescription>
             The screens read through one wrapper around two SAP APIs (OData V4): Sales Order and Credit Memo Request. Two versions of it can be
-            switched in the top bar: sample data in the APIs’ format, and the live SAP sandbox.
+            switched in the top bar: a local demo in the APIs’ format, and the live SAP sandbox. The local demo can also import original SAP
+            orders and run local simulations on them.
           </SheetDescription>
         </SheetHeader>
 
@@ -62,6 +66,20 @@ export function DataSheet() {
               </p>
             )}
             {orders.status === 'error' && <p className="text-destructive">{orders.message}</p>}
+            {imported && (
+              <p className="text-sm text-muted-foreground">
+                {imported.orders.length} original SAP orders imported {dayAndTime(imported.importedAt)}, with their item pricing.
+                Order IDs, dates, customers, products, quantities, amounts and currencies are unchanged. They are saved snapshots,
+                not live updates or Uber Eats transactions. We present them as offers for the prototype; their SAP status is unchanged.
+                Reset clears actions and keeps this snapshot.
+              </p>
+            )}
+            {source === 'sample' && (
+              <p className="text-sm text-muted-foreground">
+                Import SAP orders sends GET requests for SalesOrder and each item’s _ItemPricingElement (shown below).
+                The three NZD food orders are fictional. Deductions created by Simulate and all accept, decline and challenge actions are local.
+              </p>
+            )}
             <ul className="space-y-2">
               {repository.requests.map((r) => (
                 <li key={r.label}>
@@ -71,6 +89,16 @@ export function DataSheet() {
               ))}
             </ul>
           </section>
+
+          {source === 'sample' && (
+            <section className="space-y-1.5">
+              <h3 className="font-medium">Live GET requests used by Import SAP orders</h3>
+              {(['Orders, items and customers', 'Prices and discounts of one item']).map((label) => {
+                const request = sapRepository.requests.find((r) => r.label === label)
+                return request && <code key={label} className="block rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] break-all">{decodeURIComponent(request.request)}</code>
+              })}
+            </section>
+          )}
 
           <section className="space-y-1.5">
             <h3 className="font-medium">Where each value comes from</h3>
@@ -102,8 +130,8 @@ export function DataSheet() {
               </li>
               <li>
                 <span className="text-foreground">Accept, decline and challenge.</span> The sandbox only allows reading, and neither API takes
-                a challenge. Your answers, the payout you were shown and your challenges are kept in this browser. With a company’s own SAP
-                system they would be written back.
+                a challenge. Your answers, the payout you were shown, simulated deductions and your challenges are kept in this browser.
+                Production write-back would need a backend and an appropriate SAP integration for each action.
               </li>
               <li>
                 <span className="text-foreground">Reason texts.</span> SAP returns a reason code only. The sample data uses its own codes with

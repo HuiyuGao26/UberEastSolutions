@@ -3,6 +3,7 @@ import { round2 } from '@/domain/format'
 import type { Order } from '@/domain/types'
 import { MOCK_PRICING_ELEMENTS, missingItemCreditMemoRequest, mockSalesOrders } from './mock-data'
 import { localRecords, type OrderRepository } from './repository'
+import { importedSapOrders } from './importedOrders'
 import type { SapCreditMemoRequest } from './types'
 
 const CREDIT_MEMO_REQUESTS_KEY = 'order-care:mock-credit-memo-requests'
@@ -53,17 +54,18 @@ export const mockRepository: OrderRepository = {
   source: 'sample',
   merchant: { name: 'Kōwhai Kitchen', detail: 'Ponsonby · Open' },
   requests: [
-    { label: 'Orders, items and customers', request: 'mockSalesOrders() in src/sap/mock-data.ts' },
-    { label: 'Prices and discounts of one item', request: 'MOCK_PRICING_ELEMENTS in src/sap/mock-data.ts' },
+    { label: 'Orders, items and customers', request: 'mockSalesOrders() + original SAP SalesOrder records saved by “Import SAP orders”' },
+    { label: 'Prices and discounts of one item', request: 'MOCK_PRICING_ELEMENTS + imported SAP _ItemPricingElement records' },
     { label: 'Customer refunds (deductions)', request: 'Created by “Simulate: customer reports a missing item”, kept in this browser' },
   ],
 
   async listSalesOrders() {
-    return mockSalesOrders()
+    return [...mockSalesOrders(), ...(importedSapOrders()?.orders ?? [])]
   },
 
   async listItemPricingElements(salesOrder, salesOrderItem) {
-    return MOCK_PRICING_ELEMENTS.filter((e) => e.SalesOrder === salesOrder && e.SalesOrderItem === salesOrderItem)
+    return [...MOCK_PRICING_ELEMENTS, ...(importedSapOrders()?.pricing ?? [])]
+      .filter((e) => e.SalesOrder === salesOrder && e.SalesOrderItem === salesOrderItem)
   },
 
   async listCreditMemoRequests() {

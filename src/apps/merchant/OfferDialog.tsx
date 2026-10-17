@@ -111,6 +111,7 @@ export function OfferDialog({ order: offer, onClose }: { order: Order; onClose: 
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
           Shown before you accept. The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
+          {order.origin?.kind === 'sap' && ' Original SAP demo order. The fee, payout and merchant actions are local simulations.'}
           {pricing === 'unavailable' && ' The split into menu price and promotion could not be read; the payout is unaffected.'}
         </span>
       </p>

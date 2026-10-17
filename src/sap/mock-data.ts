@@ -59,14 +59,6 @@ export function mockSalesOrders(): SapSalesOrder[] {
         { SalesOrderItem: '20', Product: 'SODA-FEI', SalesOrderItemText: 'Feijoa soda', RequestedQuantity: 1, NetAmount: 5 },
       ],
     },
-    {
-      SalesOrder: '4818',
-      SalesOrganization: 'NZ01',
-      ...soldTo('C19355', 'Rangi H.', 'Herne Bay'),
-      ...placed(14),
-      TransactionCurrency: 'NZD',
-      _Item: [{ SalesOrderItem: '10', Product: 'BOWL-SAL', SalesOrderItemText: 'Teriyaki salmon bowl', RequestedQuantity: 1, NetAmount: 22 }],
-    },
   ]
 }
 
@@ -133,5 +125,4 @@ export const MOCK_PRICING_ELEMENTS: SapPricingElement[] = [
   promotion('4820', '20', 3.4),
   price('4819', '10', 19.5),
   price('4819', '20', 5),
-  price('4818', '10', 22),
 ]

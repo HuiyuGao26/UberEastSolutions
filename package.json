@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "e2e": "node e2e/walkthrough.mjs"
+    "e2e": "node e2e/walkthrough.mjs",
+    "e2e:import": "node e2e/import-walkthrough.mjs"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

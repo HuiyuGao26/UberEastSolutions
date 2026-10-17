@@ -11,7 +11,7 @@ import { acceptanceFor, canChallenge, payoutBreakdown } from '@/domain/rules'
 import type { Order, Screen } from '@/domain/types'
 import { cn } from '@/lib/utils'
 import { useApp, useOffers } from '@/state/store'
-import { OfferDialog } from './OfferDialog'
+import { AcceptedOrderDialog, OfferDialog } from './OfferDialog'
 import { PayoutsScreen } from './PayoutsScreen'
 
 const NAV: { id: Screen; label: string; icon: typeof Inbox }[] = [
@@ -71,7 +71,7 @@ export function MerchantApp() {
         </aside>
         <main className="min-w-0 flex-1 overflow-y-auto p-5">
           {screen === 'offers' && <OffersScreen offers={offers} onOpen={setOpenOrderId} />}
-          {screen === 'decided' && <DecidedScreen />}
+          {screen === 'decided' && <DecidedScreen key={repository.source} />}
           {screen === 'payouts' && <PayoutsScreen />}
         </main>
       </div>
@@ -107,7 +107,7 @@ function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: s
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">New orders</h2>
-        <p className="text-sm text-muted-foreground">Each order shows what it will pay you before you accept it.</p>
+        <p className="text-sm text-muted-foreground">Each order shows your expected payout before you accept it.</p>
         {source === 'sap' && (
           <p className="mt-1 text-xs text-muted-foreground">
             Read live from the SAP sandbox. These are SAP’s own demo orders, shown through the same screen as the sample data.
@@ -200,7 +200,7 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
             <p className="text-2xl font-semibold text-primary">{money(b.net, order.currency)}</p>
           </div>
           <p className="text-right text-[11px] leading-tight text-muted-foreground">
-            after the {percent(b.feeRate)} fee
+            After a {percent(b.feeRate)} fee
             <br />
             on {money(b.feeBasis, order.currency)}
           </p>
@@ -214,22 +214,24 @@ function OfferCard({ order, onOpen }: { order: Order; onOpen: () => void }) {
 }
 
 function DecidedScreen() {
-  const { decisions, deductions, setScreen } = useApp()
-  const deducted = (orderId: string) =>
+  const { decisions, deductions, challenges, setScreen } = useApp()
+  const [openOrderId, setOpenOrderId] = useState<string | null>(null)
+  const orderDeductions = (order: Order) =>
     deductions.status === 'ready'
-      ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === orderId).reduce((sum, d) => sum + d.amount, 0)
-      : 0
+      ? deductions.value.filter((d) => d.reference.kind === 'order' && d.reference.id === order.id && d.currency === order.currency)
+      : []
+  const deducted = (order: Order) => orderDeductions(order).reduce((sum, d) => sum + d.amount, 0)
   const accepted = decisions.filter((d) => d.accepted)
-  // Imported SAP orders can use USD while the food examples use NZD.
-  // Keep each currency's total separate; the app does not convert currencies.
-  const totals = new Map<string, { expected: number; deducted: number }>()
-  for (const decision of accepted) {
-    const currency = decision.order.currency
-    const total = totals.get(currency) ?? { expected: 0, deducted: 0 }
-    total.expected += decision.shown.net
-    total.deducted += deducted(decision.order.id)
-    totals.set(currency, total)
-  }
+  const openDecision = accepted.find((d) => d.order.id === openOrderId)
+  const currencies = [...new Set((accepted.length ? accepted : decisions).map((d) => d.order.currency))]
+  const totals = currencies.map((currency) => {
+    const orders = accepted.filter((d) => d.order.currency === currency)
+    return {
+      currency,
+      expected: orders.reduce((sum, d) => sum + d.shown.net, 0),
+      deducted: orders.reduce((sum, d) => sum + deducted(d.order), 0),
+    }
+  })
 
   if (decisions.length === 0) {
     return (
@@ -254,61 +256,100 @@ function DecidedScreen() {
 
       <Card size="sm" className="max-w-xs">
         <CardContent>
-          <p className="text-xs text-muted-foreground">Expected payout from accepted orders</p>
-          {totals.size === 0 && <p className="text-2xl font-semibold">—</p>}
-          {[...totals].map(([currency, total]) => (
-            <div key={currency}>
-              <p className="text-2xl font-semibold">{money(total.expected, currency)}</p>
-              {total.deducted > 0 && <p className="text-[11px] text-muted-foreground">{money(total.deducted, currency)} deducted since</p>}
+          <p className="text-xs text-muted-foreground">Current expected payout</p>
+          {deductions.status === 'ready' ? totals.map((total) => (
+            <div key={total.currency}>
+              <p className="text-2xl font-semibold">{money(total.expected - total.deducted, total.currency)}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {money(total.expected, total.currency)} at acceptance · {money(total.deducted, total.currency)} in deductions
+              </p>
             </div>
-          ))}
+          )) : (
+            <>
+              <p className="text-2xl font-semibold">—</p>
+              <p className="text-[11px] text-muted-foreground">
+                {deductions.status === 'loading' ? 'Loading deductions…' : 'Could not load deductions.'}
+              </p>
+            </>
+          )}
           <p className="text-[11px] text-muted-foreground">
             {accepted.length} accepted · {decisions.length - accepted.length} declined
           </p>
         </CardContent>
       </Card>
 
-      <Table>
+      <Table className="min-w-[736px] table-auto text-sm [&_th]:px-2 [&_th]:py-3 [&_th]:whitespace-normal [&_td]:px-2 [&_td]:py-3">
+        <colgroup>
+          <col className="w-[8%]" />
+          <col className="w-[21%]" />
+          <col className="w-[6%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[16%]" />
+          <col className="w-[12%]" />
+          <col className="w-[15%]" />
+        </colgroup>
         <TableHeader>
           <TableRow>
-            <TableHead>Order</TableHead>
-            <TableHead>Answered</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead className="text-right">Items</TableHead>
-            <TableHead>Your answer</TableHead>
+            <TableHead className="text-left">Order</TableHead>
+            <TableHead className="text-left">Responded at</TableHead>
+            <TableHead className="text-center">Items</TableHead>
+            <TableHead className="text-center">Decision</TableHead>
             <TableHead className="text-right">Fee</TableHead>
-            <TableHead className="text-right">Payout shown</TableHead>
-            <TableHead className="text-right">Deducted</TableHead>
+            <TableHead className="text-right">Payout at acceptance</TableHead>
+            <TableHead className="text-right">Deductions</TableHead>
+            <TableHead className="text-center">Challenge status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {decisions.map((d) => (
-            <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
-              <TableCell className="font-medium">
-                {d.order.id}
-                {d.order.origin?.kind === 'sap' && <span className="block text-[10px] font-normal text-muted-foreground">SAP demo record</span>}
-              </TableCell>
-              <TableCell>{dayAndTime(d.decidedAt)}</TableCell>
-              <TableCell>{d.order.customer}</TableCell>
-              <TableCell className="text-right">{itemCount(d.order)}</TableCell>
-              <TableCell>
-                <Badge variant={d.accepted ? 'default' : 'outline'}>{d.accepted ? 'Accepted' : 'Declined'}</Badge>
-              </TableCell>
-              <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
-              <TableCell className="text-right font-mono font-medium">{d.accepted ? money(d.shown.net, d.order.currency) : '—'}</TableCell>
-              <TableCell className="text-right font-mono">
-                {deducted(d.order.id) > 0 ? (
-                  <button className="text-destructive underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
-                    {signedMoney(-deducted(d.order.id), d.order.currency)}
-                  </button>
-                ) : (
-                  '—'
-                )}
-              </TableCell>
-            </TableRow>
-          ))}
+          {decisions.map((d) => {
+            const refunds = orderDeductions(d.order)
+            const sentCount = refunds.filter((refund) => challenges.some((c) => c.deductionId === refund.id)).length
+            return (
+              <TableRow key={d.order.id} className={cn(!d.accepted && 'text-muted-foreground')}>
+                <TableCell className="text-left font-medium">
+                  {d.accepted ? (
+                    <button
+                      className="text-primary underline underline-offset-2 hover:no-underline"
+                      aria-label={`View order ${d.order.id} details`}
+                      onClick={() => setOpenOrderId(d.order.id)}
+                    >
+                      {d.order.id}
+                    </button>
+                  ) : d.order.id}
+                  {d.order.origin?.kind === 'sap' && <span className="block text-[10px] font-normal text-muted-foreground">SAP demo record</span>}
+                </TableCell>
+                <TableCell className="text-left whitespace-normal">{dayAndTime(d.decidedAt)}</TableCell>
+                <TableCell className="text-center">{itemCount(d.order)}</TableCell>
+                <TableCell className="text-center">
+                  <Badge variant={d.accepted ? 'default' : 'outline'}>{d.accepted ? 'Accepted' : 'Declined'}</Badge>
+                </TableCell>
+                <TableCell className="text-right font-mono">{d.accepted ? money(d.shown.fee, d.order.currency) : '—'}</TableCell>
+                <TableCell className="text-right font-mono font-medium">{d.accepted ? money(d.shown.net, d.order.currency) : '—'}</TableCell>
+                <TableCell className="text-right font-mono">
+                  {d.accepted && deductions.status !== 'ready' ? (deductions.status === 'loading' ? 'Loading…' : 'Unavailable') : deducted(d.order) > 0 ? (
+                    <button className="text-destructive underline-offset-2 hover:underline" onClick={() => setScreen('payouts')}>
+                      {signedMoney(-deducted(d.order), d.order.currency)}
+                    </button>
+                  ) : (
+                    '—'
+                  )}
+                </TableCell>
+                <TableCell className="text-center">
+                  {!d.accepted ? <span className="font-mono">—</span> : deductions.status !== 'ready' ? (
+                    deductions.status === 'loading' ? 'Loading…' : 'Unavailable'
+                  ) : refunds.length === 0 ? <span className="font-mono">—</span> : (
+                    <Badge variant={sentCount > 0 ? 'secondary' : 'outline'}>
+                      {sentCount === 0 ? 'Not submitted' : sentCount === refunds.length ? 'Submitted' : `${sentCount}/${refunds.length} sent`}
+                    </Badge>
+                  )}
+                </TableCell>
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
+      {openDecision && <AcceptedOrderDialog decision={openDecision} onClose={() => setOpenOrderId(null)} />}
     </div>
   )
 }

@@ -47,10 +47,11 @@ export function localRecords(source: Source): LocalRecords {
       return []
     }
   }
-  function write<T>(name: string, records: T[]) {
+  function write<T>(name: string, records: T[], required = false) {
     try {
       localStorage.setItem(key(name), JSON.stringify(records))
     } catch {
+      if (required) throw new Error('Your challenge could not be saved in this browser. Free up browser storage or remove the photo and try again.')
       // Ignore: the app still works without persistence.
     }
   }
@@ -59,7 +60,7 @@ export function localRecords(source: Source): LocalRecords {
     saveDecision: (decision) => write('decisions', [decision, ...read<Decision>('decisions').filter((d) => d.order.id !== decision.order.id)]),
     listChallenges: () => read<Challenge>('challenges'),
     saveChallenge: (challenge) =>
-      write('challenges', [challenge, ...read<Challenge>('challenges').filter((c) => c.deductionId !== challenge.deductionId)]),
+      write('challenges', [challenge, ...read<Challenge>('challenges').filter((c) => c.deductionId !== challenge.deductionId)], true),
     clear: () => {
       write('decisions', [])
       write('challenges', [])

@@ -38,6 +38,8 @@ export interface Decision {
   decidedAt: string
   /** The breakdown on the offer at that moment; `net` is the payout the merchant was shown. */
   shown: PayoutBreakdown
+  /** Whether menu prices and promotions had loaded when the offer was answered. */
+  pricingAvailable?: boolean
 }
 
 /** A customer refund on an order, taken out of the merchant's payout. */
@@ -52,11 +54,19 @@ export interface Deduction {
   lines: { name: string; qty: number; amount: number }[]
 }
 
+/** One optional merchant photo attached to a challenge. */
+export interface ChallengePhoto {
+  name: string
+  /** A resized image kept in this browser, not an SAP attachment. */
+  dataUrl: string
+}
+
 /** The merchant's challenge to a deduction. */
 export interface Challenge {
   deductionId: string
   text: string
   sentAt: string
+  photo?: ChallengePhoto
 }
 
 export type Screen = 'offers' | 'decided' | 'payouts'

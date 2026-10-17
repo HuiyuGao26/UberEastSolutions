@@ -22,7 +22,7 @@ import { useApp } from '@/state/store'
  * with the reason and a way to challenge it.
  */
 export function PayoutsScreen() {
-  const { deductions, source, reload } = useApp()
+  const { deductions, reload } = useApp()
 
   return (
     <div className="space-y-4">
@@ -32,18 +32,13 @@ export function PayoutsScreen() {
           If a customer is refunded because of something on your side, the deduction appears here the same day, with the reason and a way to
           challenge it.
         </p>
-        {source === 'sap' && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Read live from the SAP sandbox. These are SAP’s own demo credit memo requests; one older than 30 days can no longer be challenged.
-          </p>
-        )}
       </div>
 
       {deductions.status === 'loading' && (
         <div className="space-y-3" role="status" aria-label="Loading deductions">
           <div className="h-40 animate-pulse rounded-xl bg-muted" />
           <p className="text-sm text-muted-foreground">
-            {source === 'sap' ? 'Reading credit memo requests from the SAP sandbox…' : 'Loading deductions…'}
+            Loading deductions…
           </p>
         </div>
       )}
@@ -70,7 +65,7 @@ export function PayoutsScreen() {
       {deductions.status === 'ready' && (
         <div className="space-y-3">
           {deductions.value.map((d) => (
-            <DeductionCard key={`${source}:${d.id}`} deduction={d} />
+            <DeductionCard key={d.id} deduction={d} />
           ))}
         </div>
       )}
@@ -79,8 +74,8 @@ export function PayoutsScreen() {
 }
 
 function DeductionCard({ deduction: d }: { deduction: Deduction }) {
-  const { source, decisions, challenges, challenge } = useApp()
-  const hasCustomerPhoto = source === 'sample' && d.reference.kind === 'order' && d.reference.id === '4821'
+  const { decisions, challenges, challenge } = useApp()
+  const hasCustomerPhoto = d.reference.kind === 'order' && d.reference.id === '4821'
   // The payout can only be shown for an order the merchant accepted in this app.
   const decision = acceptanceFor(d, decisions)
   const sent = challenges.find((c) => c.deductionId === d.id)
@@ -110,7 +105,7 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         </CardTitle>
         <CardDescription>
           Deducted {dayAndTime(d.createdAt)} · refund {d.id}
-          {source === 'sample' && ' · Local simulation, not a SAP credit memo'}
+          {' · Local simulation, not a SAP credit memo'}
         </CardDescription>
       </CardHeader>
 

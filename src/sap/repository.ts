@@ -1,13 +1,11 @@
 /**
  * The app's wrapper around the SAP APIs. Screens only talk to this
- * interface, so the sample data and the live SAP sandbox can be swapped
- * without touching them.
+ * interface, which combines local examples with imported SAP records.
  */
-import type { Challenge, Decision, Source } from '@/domain/types'
+import type { Challenge, Decision } from '@/domain/types'
 import type { SapCreditMemoRequest, SapPricingElement, SapSalesOrder } from './types'
 
 export interface OrderRepository {
-  readonly source: Source
   readonly merchant: { name: string; detail: string }
   /** The requests behind the read methods, for the "How the data is read" panel. */
   readonly requests: { label: string; request: string }[]
@@ -16,7 +14,7 @@ export interface OrderRepository {
   listSalesOrders(signal?: AbortSignal): Promise<SapSalesOrder[]>
   /** Sales Order API: price and discount conditions of one order item. */
   listItemPricingElements(salesOrder: string, salesOrderItem: string, signal?: AbortSignal): Promise<SapPricingElement[]>
-  /** Credit Memo Request API: newest customer credits with their items. */
+  /** Local simulated deductions, in the Credit Memo Request format. */
   listCreditMemoRequests(signal?: AbortSignal): Promise<SapCreditMemoRequest[]>
 
   /** The merchant's accept and decline decisions. */
@@ -32,13 +30,14 @@ export interface OrderRepository {
 type LocalRecords = Pick<OrderRepository, 'listDecisions' | 'saveDecision' | 'listChallenges' | 'saveChallenge' | 'clear'>
 
 /**
- * What the merchant does is kept in the browser for both repositories. The
+ * What the merchant does is kept in the browser. The
  * prototype only sends GET requests, and neither API has a
  * field for "amount shown at acceptance" or for a challenge. Against a
  * company's own S/4HANA system, write-back would need suitable APIs and a backend.
  */
-export function localRecords(source: Source): LocalRecords {
-  const key = (name: string) => `order-care:${name}:${source}`
+export function localRecords(namespace = 'sample'): LocalRecords {
+  // Keep the existing namespace so earlier demo decisions and photos survive.
+  const key = (name: string) => `order-care:${name}:${namespace}`
   function read<T>(name: string): T[] {
     try {
       return JSON.parse(localStorage.getItem(key(name)) ?? '[]') as T[]

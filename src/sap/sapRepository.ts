@@ -1,10 +1,8 @@
-/** Reads from the live SAP Business Accelerator Hub sandbox. */
+/** Read-only SAP order client used by the unified demo's import. */
 import { SERVICES, getJson, odataUrl, type ODataList } from './client'
-import { localRecords, type OrderRepository } from './repository'
-import type { SapCreditMemoRequest, SapPricingElement, SapSalesOrder } from './types'
+import type { SapPricingElement, SapSalesOrder } from './types'
 
 const ORDER_COUNT = 8
-const CREDIT_MEMO_REQUEST_COUNT = 6
 
 const ORDER_QUERY = {
   $top: ORDER_COUNT,
@@ -20,47 +18,25 @@ const PRICING_QUERY = {
     'SalesOrder,SalesOrderItem,PricingProcedureStep,ConditionType,PriceElementDescription,ConditionClass,ConditionAmount,ConditionInactiveReason,ConditionIsForStatistics',
 }
 
-const CREDIT_MEMO_REQUEST_QUERY = {
-  $top: CREDIT_MEMO_REQUEST_COUNT,
-  $orderby: 'CreationDate desc,CreditMemoRequest desc',
-  $select:
-    'CreditMemoRequest,CreationDate,CreationTime,TotalNetAmount,TransactionCurrency,SDDocumentReason,ReferenceSDDocument,ReferenceSDDocumentCategory',
-  $expand: '_Item($select=CreditMemoRequestItem,CreditMemoRequestItemText,RequestedQuantity,NetAmount)',
-}
-
 // SAP allows pricing elements to be read for one order item per request.
 function pricingPath(salesOrder: string, salesOrderItem: string): string {
   return `SalesOrderItem(SalesOrder='${salesOrder}',SalesOrderItem='${salesOrderItem}')/_ItemPricingElement`
 }
 
-export const sapRepository: OrderRepository = {
-  source: 'sap',
-  merchant: { name: 'SAP sandbox company', detail: 'S/4HANA Cloud demo data' },
+export const sapOrderReader = {
   requests: [
     { label: 'Orders, items and customers', request: `GET ${odataUrl(SERVICES.salesOrder, 'SalesOrder', ORDER_QUERY)}` },
     { label: 'Prices and discounts of one item', request: `GET ${odataUrl(SERVICES.salesOrder, pricingPath('{order}', '{item}'), PRICING_QUERY)}` },
-    {
-      label: 'Customer refunds (deductions)',
-      request: `GET ${odataUrl(SERVICES.creditMemoRequest, 'CreditMemoRequest', CREDIT_MEMO_REQUEST_QUERY)}`,
-    },
   ],
 
-  async listSalesOrders(signal) {
+  async listSalesOrders(signal?: AbortSignal) {
     const data = await getJson<ODataList<SapSalesOrder>>(odataUrl(SERVICES.salesOrder, 'SalesOrder', ORDER_QUERY), signal)
     return data.value
   },
 
-  async listItemPricingElements(salesOrder, salesOrderItem, signal) {
+  async listItemPricingElements(salesOrder: string, salesOrderItem: string, signal?: AbortSignal) {
     const url = odataUrl(SERVICES.salesOrder, pricingPath(salesOrder, salesOrderItem), PRICING_QUERY)
     const data = await getJson<ODataList<SapPricingElement>>(url, signal)
     return data.value
   },
-
-  async listCreditMemoRequests(signal) {
-    const url = odataUrl(SERVICES.creditMemoRequest, 'CreditMemoRequest', CREDIT_MEMO_REQUEST_QUERY)
-    const data = await getJson<ODataList<SapCreditMemoRequest>>(url, signal)
-    return data.value
-  },
-
-  ...localRecords('sap'),
 }

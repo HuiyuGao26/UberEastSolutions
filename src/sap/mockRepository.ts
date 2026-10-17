@@ -1,4 +1,4 @@
-/** Serves the sample data in `mock-data.ts` through the same interface as the live sandbox. */
+/** The unified demo: three food orders, imported SAP snapshots and local actions. */
 import { round2 } from '@/domain/format'
 import type { Order } from '@/domain/types'
 import { MOCK_PRICING_ELEMENTS, missingItemCreditMemoRequest, mockSalesOrders } from './mock-data'
@@ -51,10 +51,9 @@ export function simulateMissingItemRefund(order: Order): SapCreditMemoRequest {
 const records = localRecords('sample')
 
 export const mockRepository: OrderRepository = {
-  source: 'sample',
   merchant: { name: 'Kōwhai Kitchen', detail: 'Ponsonby · Open' },
   requests: [
-    { label: 'Orders, items and customers', request: 'mockSalesOrders() + original SAP SalesOrder records saved by “Import SAP orders”' },
+    { label: 'Orders, items and customers', request: 'mockSalesOrders() + original SAP SalesOrder snapshots refreshed from Demo tools' },
     { label: 'Prices and discounts of one item', request: 'MOCK_PRICING_ELEMENTS + imported SAP _ItemPricingElement records' },
     { label: 'Customer refunds (deductions)', request: 'Created by “Simulate: customer reports a missing item”, kept in this browser' },
   ],

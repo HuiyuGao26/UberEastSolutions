@@ -1,6 +1,3 @@
-/** Which repository the app reads from: the sample data or the live SAP sandbox. */
-export type Source = 'sample' | 'sap'
-
 export interface OrderLine {
   id: string
   name: string

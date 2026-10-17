@@ -1,5 +1,5 @@
-// Walks through the app in headless Chrome and saves screenshots: first on the
-// sample data, then on the live SAP sandbox (skipped with E2E_SKIP_SAP=1).
+// Walks through food orders, accepted details and photo evidence in the unified demo.
+// Real SAP import coverage lives in import-walkthrough.mjs.
 // Usage: npm run dev, then `npm run e2e` (screenshots go to e2e/shots/).
 // A second argument tests another address, e.g. the built file:
 //   node e2e/walkthrough.mjs e2e/shots "file://$PWD/dist/index.html"
@@ -32,10 +32,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const text = () => page.evaluate(() => document.body.innerText)
 async function shot(name) { await sleep(300); await page.screenshot({ path: `${OUT}/${name}.png` }) }
 async function click(label) {
-  for (const h of await page.$$('button')) {
+  const menuActions = { Reset: 'Reset demo', 'How the data is read': 'How the data is read' }
+  if (menuActions[label]) {
+    await click('Demo tools')
+    label = menuActions[label]
+  }
+  for (const h of await page.$$('button, [role="menuitem"]')) {
     const ok = await h.evaluate((el, t) => {
       const r = el.getBoundingClientRect()
-      return el.textContent.trim().includes(t) && r.width > 0 && r.height > 0 && !el.disabled
+      return el.textContent.trim().includes(t) && r.width > 0 && r.height > 0 && !el.disabled && !el.hasAttribute('data-disabled')
     }, label)
     if (ok) { await h.click(); await sleep(250); return }
   }
@@ -86,7 +91,7 @@ async function expectSavedOrderDetails() {
 const SIMULATE = 'Simulate: customer reports a missing item'
 
 // --- Sample data ---------------------------------------------------------------
-await page.goto(`${URL}?source=sample`, { waitUntil: 'networkidle0' })
+await page.goto(URL, { waitUntil: 'networkidle0' })
 await page.evaluate(() => localStorage.clear())
 await page.reload({ waitUntil: 'networkidle0' })
 
@@ -354,38 +359,6 @@ try {
   }
 } finally {
   rmSync(photoFixtures, { recursive: true, force: true })
-}
-
-// --- Live SAP sandbox ----------------------------------------------------------
-if (!process.env.E2E_SKIP_SAP) {
-  await click('SAP sandbox')
-  await waitForText('Review offer', 60_000)
-  if ((await isDisabled(SIMULATE)) !== true) throw new Error('The simulation should be disabled on the SAP sandbox')
-  await expectText('Sample data only')
-  await shot('10-sap-offers')
-  await click('Review offer')
-  await waitForText('Items at menu price', 60_000)
-  await shot('11-sap-offer')
-  await click('Accept order')
-  if ((await isDisabled(SIMULATE)) !== true) throw new Error('The simulation should stay disabled on the SAP sandbox')
-  await click('Accepted')
-  await expectText('Payout at acceptance')
-  await click('Payouts')
-  await waitForText('Challenge window closed', 60_000)
-  await expectText('SAP order reason')
-  if ((await text()).includes('No customer photo available')) throw new Error('SAP deductions should not display missing-photo placeholder text')
-  if (await page.$('[aria-label="View customer sample photo"]')) throw new Error('SAP deductions incorrectly show a sample customer photo')
-  await shot('12-sap-deductions')
-  await click('How the data is read')
-  await waitForText('SAP sandbox (live)')
-  await shot('13-sap-how-data-is-read')
-  await page.keyboard.press('Escape')
-  await page.waitForFunction(() => !document.querySelector('[role="dialog"]'))
-  await click('Sample data')
-  await waitForText('Order 4821')
-  if ((await isDisabled(SIMULATE)) !== true) throw new Error('A SAP acceptance enabled the sample simulation')
-  await click('Payouts')
-  await expectText('No deductions. Nothing has been taken from your payouts.')
 }
 
 await browser.close()

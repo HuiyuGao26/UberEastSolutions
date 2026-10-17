@@ -1,10 +1,8 @@
-import { Workflow } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { dayAndTime, percent } from '@/domain/format'
 import { FEE_RATE } from '@/domain/rules'
 import { importedSapOrders } from '@/sap/importedOrders'
-import { sapRepository } from '@/sap/sapRepository'
+import { sapOrderReader } from '@/sap/sapRepository'
 import { useApp } from '@/state/store'
 
 /** Where each value on the merchant screens comes from in the two SAP APIs. */
@@ -22,7 +20,7 @@ const FIELD_MAP: { api: string; fields: [onScreen: string, sapField: string][] }
     ],
   },
   {
-    api: 'Credit Memo Request API',
+    api: 'Credit Memo Request format (local simulation)',
     fields: [
       ['Deduction amount', 'TotalNetAmount'],
       ['Deducted on', 'CreationDate + CreationTime'],
@@ -34,35 +32,27 @@ const FIELD_MAP: { api: string; fields: [onScreen: string, sapField: string][] }
 ]
 
 /** Explains the SAP API wrapper: what is read, from where, and what the app adds. */
-export function DataSheet() {
-  const { source, repository, orders, deductions } = useApp()
-  const imported = source === 'sample' ? importedSapOrders() : null
+export function DataSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { repository, orders, deductions } = useApp()
+  const imported = importedSapOrders()
 
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Workflow /> How the data is read
-        </Button>
-      </SheetTrigger>
+    <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="overflow-y-auto data-[side=right]:sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>How the data is read</SheetTitle>
           <SheetDescription>
-            The screens read through one wrapper around two SAP APIs (OData V4): Sales Order and Credit Memo Request. Two versions of it can be
-            switched in the top bar: a local demo in the APIs’ format, and the live SAP sandbox. The local demo can also import original SAP
-            orders and run local simulations on them.
+            One demo combines three fictional food orders with original Sales Order records read from SAP (OData V4).
+            Deductions use the Credit Memo Request format locally. All merchant actions are simulated in this browser.
           </SheetDescription>
         </SheetHeader>
 
         <div className="space-y-5 px-4 pb-6">
           <section className="space-y-1.5">
-            <h3 className="font-medium">Now reading from: {source === 'sap' ? 'SAP sandbox (live)' : 'Sample data'}</h3>
+            <h3 className="font-medium">Food examples and imported SAP orders</h3>
             {orders.status === 'ready' && deductions.status === 'ready' && (
               <p className="text-muted-foreground">
-                {orders.value.length} orders and {deductions.value.length} credit memo requests loaded
-                {source === 'sap' ? ` in ${(Math.max(orders.ms, deductions.ms) / 1000).toFixed(1)} s` : ''}.
-                {source === 'sap' && ' These are SAP’s own demo records, not Uber Eats data.'}
+                {orders.value.length} orders and {deductions.value.length} locally simulated deductions loaded.
               </p>
             )}
             {orders.status === 'error' && <p className="text-destructive">{orders.message}</p>}
@@ -74,12 +64,10 @@ export function DataSheet() {
                 Reset clears actions and keeps this snapshot.
               </p>
             )}
-            {source === 'sample' && (
-              <p className="text-sm text-muted-foreground">
-                Import SAP orders sends GET requests for SalesOrder and each item’s _ItemPricingElement (shown below).
-                The three NZD food orders are fictional. Deductions created by Simulate and all accept, decline and challenge actions are local.
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Refresh SAP data sends GET requests for SalesOrder and each item’s _ItemPricingElement (shown below).
+              The three NZD food orders are fictional. Deductions created by Simulate and all accept, decline and challenge actions are local.
+            </p>
             <ul className="space-y-2">
               {repository.requests.map((r) => (
                 <li key={r.label}>
@@ -90,15 +78,12 @@ export function DataSheet() {
             </ul>
           </section>
 
-          {source === 'sample' && (
-            <section className="space-y-1.5">
-              <h3 className="font-medium">Live GET requests used by Import SAP orders</h3>
-              {(['Orders, items and customers', 'Prices and discounts of one item']).map((label) => {
-                const request = sapRepository.requests.find((r) => r.label === label)
-                return request && <code key={label} className="block rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] break-all">{decodeURIComponent(request.request)}</code>
-              })}
-            </section>
-          )}
+          <section className="space-y-1.5">
+            <h3 className="font-medium">Live GET requests used by Refresh SAP data</h3>
+            {sapOrderReader.requests.map((request) => (
+              <code key={request.label} className="block rounded-md bg-muted px-2 py-1.5 font-mono text-[11px] break-all">{decodeURIComponent(request.request)}</code>
+            ))}
+          </section>
 
           <section className="space-y-1.5">
             <h3 className="font-medium">Where each value comes from</h3>
@@ -129,13 +114,12 @@ export function DataSheet() {
                 fee basis × {percent(FEE_RATE)} (an illustrative rate), and payout = fee basis − fee.
               </li>
               <li>
-                <span className="text-foreground">Accept, decline and challenge.</span> The sandbox only allows reading, and neither API takes
-                a challenge. Your answers, the payout you were shown, simulated deductions and your challenges are kept in this browser.
+                <span className="text-foreground">Accept, decline and challenge.</span> SAP data is read through GET requests.
+                Your answers, the payout you were shown, simulated deductions and your challenges are kept in this browser.
                 Production write-back would need a backend and an appropriate SAP integration for each action.
               </li>
               <li>
-                <span className="text-foreground">Reason texts.</span> SAP returns a reason code only. The sample data uses its own codes with
-                texts; codes from the sandbox are shown as they are.
+                <span className="text-foreground">Reason texts.</span> Simulated deductions use custom codes with descriptions defined by this app.
               </li>
             </ul>
           </section>

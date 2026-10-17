@@ -14,6 +14,8 @@ const browser = await puppeteer.launch({
 })
 try {
   const page = await browser.newPage()
+  // A previously saved standalone-SAP choice must no longer select another mode.
+  await page.evaluateOnNewDocument(() => localStorage.setItem('order-care:source', 'sap'))
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
   const requests = []
@@ -44,20 +46,35 @@ try {
   })
   const body = () => page.evaluate(() => document.body.innerText)
   const wait = (text) => page.waitForFunction((t) => document.body.innerText.includes(t), { timeout: 60_000 }, text)
-  const waitForImport = () => page.waitForFunction(() => [...document.querySelectorAll('button')]
-    .some((button) => button.textContent.includes('Import SAP orders') && !button.disabled), { timeout: 60_000 })
+  const waitForImport = () => page.waitForFunction(() => !document.body.innerText.includes('Reading SAP data…'), { timeout: 60_000 })
   async function click(text) {
-    const button = await page.waitForSelector(`::-p-xpath(//button[contains(., '${text}') and not(@disabled)])`)
-    await button.click()
+    const menuActions = { Reset: 'Reset demo', 'Import SAP orders': 'Refresh SAP data', 'How the data is read': 'How the data is read' }
+    if (menuActions[text]) {
+      await click('Demo tools')
+      const item = await page.waitForSelector(`::-p-xpath(//*[@role='menuitem'][contains(., '${menuActions[text]}') and not(@data-disabled)])`)
+      await item.click()
+    } else {
+      const button = await page.waitForSelector(`::-p-xpath(//button[contains(., '${text}') and not(@disabled)])`)
+      await button.click()
+    }
   }
   const snapshot = () => page.evaluate(() => JSON.parse(localStorage.getItem('order-care:imported-sap-orders:v1')))
   const screenshot = (name) => page.screenshot({ path: `${out}/${name}.png` })
-  await page.goto(`${url}?source=sample`, { waitUntil: 'networkidle0' })
+  await page.goto(`${url}?source=sap`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => localStorage.clear())
   await page.reload({ waitUntil: 'networkidle0' })
   await wait('Order 4821')
   await wait('SAP demo record')
   await waitForImport()
+  const layout = await page.evaluate(() => ({
+    headerButtons: [...document.querySelectorAll('header button')].map((button) => button.textContent.trim()),
+    sourceSwitcher: Boolean(document.querySelector('[aria-label="Data source"]')),
+    simulationBelowTablet: document.querySelector('[aria-label="Customer simulation"]').getBoundingClientRect().top
+      >= document.querySelector('aside').getBoundingClientRect().bottom,
+  }))
+  assert.deepEqual(layout.headerButtons, ['Demo tools'])
+  assert.equal(layout.sourceSwitcher, false)
+  assert.equal(layout.simulationBelowTablet, true)
   const titles = await page.$$eval('[data-slot="card-title"]', (elements) => elements.map((element) => element.innerText))
   assert(titles[0].startsWith('Order 4821'))
   assert(titles[1].startsWith('Order 4820'))
@@ -133,6 +150,7 @@ try {
   await wait('original SAP orders imported')
   await screenshot('04-import-provenance')
   assert(requests.every((request) => ['GET', 'OPTIONS'].includes(request.method)), 'Only GET and CORS preflight are allowed')
+  assert(requests.every((request) => !request.url.toLowerCase().includes('creditmemorequest')), 'The removed standalone mode must not load old credit memos')
   assert.deepEqual(errors, [])
   console.log(`Import walkthrough passed (${process.env.E2E_LIVE_SAP ? 'live SAP' : 'test responses'}). ${out}`)
 } finally {

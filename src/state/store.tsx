@@ -1,19 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toDeduction, toOrder } from '@/domain/mapping'
-import type { Challenge, ChallengePhoto, Decision, Deduction, Order, PayoutBreakdown, Screen, Source } from '@/domain/types'
+import type { Challenge, ChallengePhoto, Decision, Deduction, Order, PayoutBreakdown, Screen } from '@/domain/types'
 import { mockRepository, simulateMissingItemRefund } from '@/sap/mockRepository'
 import type { OrderRepository } from '@/sap/repository'
-import { sapRepository } from '@/sap/sapRepository'
 import { importedSapOrders } from '@/sap/importedOrders'
 
-const REPOSITORIES: Record<Source, OrderRepository> = { sample: mockRepository, sap: sapRepository }
-const SOURCE_KEY = 'order-care:source'
+const repository = mockRepository
 
 export type Loaded<T> = { status: 'loading' } | { status: 'error'; message: string } | { status: 'ready'; value: T; ms: number }
 
 interface AppStore {
-  source: Source
-  setSource: (source: Source) => void
   screen: Screen
   setScreen: (screen: Screen) => void
   repository: OrderRepository
@@ -27,7 +23,7 @@ interface AppStore {
   challenge: (deductionId: string, text: string, photo?: ChallengePhoto) => void
   /**
    * The most recently accepted order, unless a report was already simulated
-   * for it. Only the sample data supports the simulation.
+   * for it. Both food examples and imported SAP orders support local simulation.
    */
   simulationTarget: Decision | undefined
   simulateMissingItem: () => void
@@ -35,17 +31,6 @@ interface AppStore {
   notice: Deduction | null
   dismissNotice: () => void
   reset: () => void
-}
-
-/** `?source=sap` or `?source=sample` in the address wins over the last choice. */
-function initialSource(): Source {
-  const fromUrl = new URLSearchParams(location.search).get('source')
-  if (fromUrl === 'sap' || fromUrl === 'sample') return fromUrl
-  try {
-    return localStorage.getItem(SOURCE_KEY) === 'sap' ? 'sap' : 'sample'
-  } catch {
-    return 'sample'
-  }
 }
 
 type Keyed<T> = { key: string; result: Loaded<T> } | null
@@ -63,10 +48,10 @@ function load<T>(key: string, read: (signal: AbortSignal) => Promise<T>, store: 
   return () => controller.abort()
 }
 
-/** Keep same-source records visible during refresh, including an open offer or challenge draft. */
+/** Keep records visible during refresh, including an open offer or challenge draft. */
 function current<T>(loaded: Keyed<T>, key: string): Loaded<T> {
   if (loaded?.key === key) return loaded.result
-  if (loaded?.key.split(':')[0] === key.split(':')[0] && loaded?.result.status === 'ready') return loaded.result
+  if (loaded?.result.status === 'ready') return loaded.result
   return { status: 'loading' }
 }
 
@@ -77,16 +62,14 @@ function localRecordsOf(repository: OrderRepository) {
 const StoreContext = createContext<AppStore | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [source, setSourceState] = useState<Source>(initialSource)
   const [screen, setScreenState] = useState<Screen>('offers')
   const [notice, setNotice] = useState<Deduction | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [orders, setOrders] = useState<Keyed<Order[]>>(null)
   const [deductions, setDeductions] = useState<Keyed<Deduction[]>>(null)
-  const [records, setRecords] = useState(() => ({ sample: localRecordsOf(mockRepository), sap: localRecordsOf(sapRepository) }))
+  const [records, setRecords] = useState(() => localRecordsOf(repository))
 
-  const repository = REPOSITORIES[source]
-  const loadKey = `${source}:${attempt}`
+  const loadKey = String(attempt)
 
   useEffect(
     () =>
@@ -95,23 +78,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // An order without items has nothing to pay out.
         async (signal) => {
           const raw = await repository.listSalesOrders(signal)
-          const snapshot = source === 'sample' ? importedSapOrders() : null
+          const snapshot = importedSapOrders()
           const importedIds = new Set(snapshot?.orders.map((order) => order.SalesOrder))
           return raw.filter((so) => so._Item.length > 0).map((so) => ({
             ...toOrder(so),
-            origin: source === 'sap' || importedIds.has(so.SalesOrder)
+            origin: importedIds.has(so.SalesOrder)
               ? { kind: 'sap' as const, importedAt: snapshot?.importedAt ?? new Date().toISOString() }
               : { kind: 'sample' as const },
           }))
         },
         setOrders,
       ),
-    [repository, loadKey, source],
+    [loadKey],
   )
 
   useEffect(
     () => load(loadKey, async (signal) => (await repository.listCreditMemoRequests(signal)).map(toDeduction), setDeductions),
-    [repository, loadKey],
+    [loadKey],
   )
 
   const setScreen = useCallback((next: Screen) => {
@@ -120,43 +103,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (next === 'payouts') setNotice(null)
   }, [])
 
-  const setSource = useCallback((next: Source) => {
-    setSourceState(next)
-    setScreenState('offers')
-    setNotice(null)
-    try {
-      localStorage.setItem(SOURCE_KEY, next)
-    } catch {
-      // Ignore: the choice just will not be remembered.
-    }
-  }, [])
-
   const value = useMemo<AppStore>(() => {
-    const refreshRecords = () => setRecords((all) => ({ ...all, [source]: localRecordsOf(repository) }))
+    const refreshRecords = () => setRecords(localRecordsOf(repository))
     const shownDeductions = current(deductions, loadKey)
-    const latestAccepted = records.sample.decisions.find((d) => d.accepted)
+    const latestAccepted = records.decisions.find((d) => d.accepted)
     const simulationTarget =
-      source === 'sample' &&
       shownDeductions.status === 'ready' &&
       latestAccepted &&
       !shownDeductions.value.some((d) => d.reference.kind === 'order' && d.reference.id === latestAccepted.order.id)
         ? latestAccepted
         : undefined
     return {
-      source,
-      setSource,
       screen,
       setScreen,
       repository,
       orders: current(orders, loadKey),
       deductions: shownDeductions,
       reload: () => setAttempt((n) => n + 1),
-      decisions: records[source].decisions,
+      decisions: records.decisions,
       decide: (order, accepted, shown, pricingAvailable) => {
         repository.saveDecision({ order, accepted, decidedAt: new Date().toISOString(), shown, pricingAvailable })
         refreshRecords()
       },
-      challenges: records[source].challenges,
+      challenges: records.challenges,
       challenge: (deductionId, text, photo) => {
         repository.saveChallenge({ deductionId, text, sentAt: new Date().toISOString(), photo })
         refreshRecords()
@@ -177,15 +146,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notice,
       dismissNotice: () => setNotice(null),
       reset: () => {
-        mockRepository.clear()
-        sapRepository.clear()
-        setRecords({ sample: localRecordsOf(mockRepository), sap: localRecordsOf(sapRepository) })
+        repository.clear()
+        setRecords(localRecordsOf(repository))
         setScreenState('offers')
         setNotice(null)
         setAttempt((n) => n + 1)
       },
     }
-  }, [source, setSource, screen, setScreen, repository, orders, deductions, loadKey, records, notice])
+  }, [screen, setScreen, orders, deductions, loadKey, records, notice])
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }

@@ -33,7 +33,7 @@ test('old text-only challenges and optional photos survive repository reloads', 
   assert.deepEqual(localRecords('sample').listChallenges(), [{ ...challenge, photo }])
 })
 
-test('sample and SAP evidence stays separate; Reset clears saved evidence', () => {
+test('browser record namespaces stay separate; Reset clears saved evidence', () => {
   localRecords('sample').saveChallenge({ ...challenge, photo })
   assert.deepEqual(localRecords('sap').listChallenges(), [])
   localRecords('sample').clear()

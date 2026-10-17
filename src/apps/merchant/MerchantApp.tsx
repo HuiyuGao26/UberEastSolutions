@@ -71,7 +71,7 @@ export function MerchantApp() {
         </aside>
         <main className="min-w-0 flex-1 overflow-y-auto p-5">
           {screen === 'offers' && <OffersScreen offers={offers} onOpen={setOpenOrderId} />}
-          {screen === 'decided' && <DecidedScreen key={repository.source} />}
+          {screen === 'decided' && <DecidedScreen />}
           {screen === 'payouts' && <PayoutsScreen />}
         </main>
       </div>
@@ -101,19 +101,14 @@ export function MerchantApp() {
 }
 
 function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: string) => void }) {
-  const { orders, source, setSource, reload, decisions } = useApp()
+  const { orders, reload, decisions } = useApp()
 
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">New orders</h2>
         <p className="text-sm text-muted-foreground">Each order shows your expected payout before you accept it.</p>
-        {source === 'sap' && (
-          <p className="mt-1 text-xs text-muted-foreground">
-            Read live from the SAP sandbox. These are SAP’s own demo orders, shown through the same screen as the sample data.
-          </p>
-        )}
-        {source === 'sample' && orders.status === 'ready' && orders.value.some((order) => order.origin?.kind === 'sap') && (
+        {orders.status === 'ready' && orders.value.some((order) => order.origin?.kind === 'sap') && (
           <p className="mt-1 text-xs text-muted-foreground">
             Food orders are fictional. Cards marked SAP demo record keep the imported data unchanged. All actions are simulated locally.
           </p>
@@ -126,7 +121,7 @@ function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: s
             <div key={i} className="h-44 animate-pulse rounded-xl bg-muted" />
           ))}
           <p className="col-span-2 text-sm text-muted-foreground">
-            {source === 'sap' ? 'Reading sales orders from the SAP sandbox…' : 'Loading orders…'}
+            Loading orders…
           </p>
         </div>
       )}
@@ -141,11 +136,6 @@ function OffersScreen({ offers, onOpen }: { offers: Order[]; onOpen: (orderId: s
               <Button size="sm" variant="outline" onClick={reload}>
                 <RefreshCw /> Try again
               </Button>
-              {source === 'sap' && (
-                <Button size="sm" variant="outline" onClick={() => setSource('sample')}>
-                  Use sample data
-                </Button>
-              )}
             </div>
           </AlertDescription>
         </Alert>

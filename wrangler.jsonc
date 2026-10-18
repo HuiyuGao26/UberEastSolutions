@@ -8,5 +8,8 @@
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"
-  }
+  },
+  // Non-production branch builds run `npx wrangler preview`, which needs this block.
+  // It stays empty because previews use the same top-level settings.
+  "previews": {}
 }

@@ -175,7 +175,7 @@ function OrderDetailsDialog({ order, breakdown: b, pricing, onClose, readOnly = 
       <p className="flex gap-1.5 px-5 text-xs text-muted-foreground">
         <Info className="mt-0.5 size-3.5 shrink-0" />
         <span>
-          {readOnly ? 'This estimate was saved when you accepted the order.' : 'This estimate is shown before you accept the order.'} The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price.
+          {readOnly ? 'This estimate was saved when you accepted the order.' : 'This estimate is shown before you accept the order.'} The fee rate is illustrative. With your own promotion, the fee is worked out on the discounted price. This is an estimate, not a guarantee; refunds or other adjustments can change the final payout.
           {order.origin?.kind === 'sap' && ' Original SAP demo order. The fee, payout and merchant actions are local simulations.'}
           {pricing === 'unavailable' && (readOnly
             ? ' The saved record does not confirm the split into menu price and promotion; the payout shown at acceptance is preserved.'

@@ -229,7 +229,13 @@ function DeductionCard({ deduction: d }: { deduction: Deduction }) {
         <CardFooter className="justify-end gap-2">
           {writing ? (
             <>
-              <Button variant="ghost" disabled={readingPhoto} onClick={() => setWriting(false)}>
+              <Button variant="ghost" disabled={readingPhoto} onClick={() => {
+                setWriting(false)
+                setText('')
+                setPhoto(undefined)
+                setPhotoError('')
+                setSubmitError('')
+              }}>
                 Cancel
               </Button>
               <Button
